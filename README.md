@@ -104,6 +104,8 @@ The repository intentionally does not include camera originals, router credentia
 
 If you want to try this project in practice, show the repository to an AI assistant and work through the setup with it. With an AI collaborator, you can explore and enjoy the project step by step.
 
+As the project matures toward a product-ready stage, I plan to package it into a more accessible product. Until then, I hope you will stay interested and follow its progress.
+
 ## Hackathon Context
 
 This project was prepared for OpenAI Build Week. The project existed before the Hackathon Submission Period, so the repository documents the prior foundation separately from the meaningful extension made during the submission period.
