@@ -6,6 +6,8 @@ The project provides browser-based live view, autofocus, shutter control, captur
 
 This repository is both a working prototype and a record of how a developer and Codex built, measured, debugged, and stabilized a real camera system together.
 
+The current prototype supports the Nikon D810, with plans to support more cameras and provide additional capabilities over time.
+
 ## Why This Project Exists
 
 Modern mirrorless cameras make wireless remote shooting feel normal. Older DSLR bodies often remain optically and mechanically valuable, but their remote workflows are fragmented, fragile, or tied to desktop software.
