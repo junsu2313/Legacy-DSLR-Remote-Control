@@ -27,8 +27,8 @@ This project began with those questions: how can modern convenience be brought t
 - Runtime observation across UI, CGI, bridge, PTP, and frame-production layers
 - Recovery behavior for degraded session and live-view conditions
 - Captured JPEG preview and full-size image delivery paths
-- Measured live-view improvement from an early approximately 2 FPS baseline to approximately 20 FPS operation and a 26.3 FPS peak
-- Measured captured-preview improvement from approximately 19–20 seconds to around 2 seconds through a bounded preview path
+- Live-view performance: early development approximately 2 FPS → final approximately 20 FPS, with a 26.3 FPS peak
+- Captured-image preview: early development approximately 19–20 seconds → final around 2 seconds
 
 ## System Shape
 
