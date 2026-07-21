@@ -1,0 +1,37 @@
+#!/bin/sh
+
+[ "${ACTION:-}" = "add" ] || exit 0
+case "${PRODUCT:-}" in
+  4b0/436/*|04b0/0436/*) ;;
+  *) exit 0 ;;
+esac
+
+USB_ROOT=/sys/bus/usb/devices/usb1/power
+[ -w "$USB_ROOT/control" ] && printf '%s\n' on > "$USB_ROOT/control"
+[ -w "$USB_ROOT/autosuspend" ] && printf '%s\n' -1 > "$USB_ROOT/autosuspend"
+
+(
+  LOCK=/tmp/d810-usb-hotplug-recover.lock
+  mkdir "$LOCK" 2>/dev/null || exit 0
+  trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
+  sleep 2
+
+  attempt=1
+  while [ "$attempt" -le 5 ]; do
+    result=$(QUERY_STRING=action=recover /bin/sh /www/cgi-bin/action-v21 2>/dev/null || true)
+    case "$result" in
+      *'"ok":true'*)
+        logger -t d810-hotplug "D810 session recovered after USB add"
+        printf '%s\n' "$result" > /tmp/d810-usb-hotplug-last.json
+        exit 0
+        ;;
+    esac
+    sleep 2
+    attempt=$((attempt + 1))
+  done
+
+  logger -t d810-hotplug "D810 session recovery failed after USB add"
+  printf '%s\n' "${result:-}" > /tmp/d810-usb-hotplug-last.json
+) >/tmp/d810-usb-hotplug.log 2>&1 &
+
+exit 0

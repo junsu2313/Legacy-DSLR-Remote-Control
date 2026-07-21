@@ -1,0 +1,21 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+SCRIPT_DIR=$(dirname "$0")
+case "$SCRIPT_DIR" in
+  /*) ;;
+  *) SCRIPT_DIR=/www/cgi-bin ;;
+esac
+. "$SCRIPT_DIR/variant-initial-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+
+DETECTED=false
+if camera_hardware_detected; then
+  DETECTED=true
+fi
+
+printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+if [ "$DETECTED" = "true" ]; then
+  printf '{"ok":true,"status":"detected","cameraDetected":true,"hardwareDetected":true,"liveView":false}\n'
+else
+  printf '{"ok":false,"status":"camera_missing","cameraDetected":false,"hardwareDetected":false,"liveView":false}\n'
+fi

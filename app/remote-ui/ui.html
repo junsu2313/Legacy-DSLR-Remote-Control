@@ -1,0 +1,1786 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <title>D810 Remote</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg0: #05070b;
+      --bg1: #09111a;
+      --bg2: #0d1724;
+      --panel: rgba(11, 17, 25, 0.84);
+      --panel-strong: rgba(8, 13, 20, 0.94);
+      --line: rgba(255, 255, 255, 0.09);
+      --line-strong: rgba(255, 255, 255, 0.16);
+      --text: #edf4ff;
+      --muted: #9fb0c7;
+      --gold: #f6d77f;
+      --mint: #77ead0;
+      --danger: #ff8578;
+      --shadow: 0 26px 70px rgba(0, 0, 0, 0.34);
+      --shadow-soft: 0 14px 32px rgba(0, 0, 0, 0.22);
+      --radius: 24px;
+      --gap: 12px;
+      --button-h: 58px;
+      --aspect: 3 / 2;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+    }
+
+    body {
+      font: 500 15px/1.5 "Segoe UI Variable Text", "Aptos", "Bahnschrift", "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 10%, rgba(113, 227, 199, 0.16), transparent 28%),
+        radial-gradient(circle at 88% 0%, rgba(245, 215, 131, 0.14), transparent 26%),
+        radial-gradient(circle at 88% 82%, rgba(255, 133, 120, 0.10), transparent 24%),
+        linear-gradient(180deg, var(--bg2), var(--bg1) 42%, var(--bg0));
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.02), transparent 18% 82%, rgba(255, 255, 255, 0.02));
+      opacity: 0.32;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: var(--gap);
+      padding: 12px;
+      position: relative;
+    }
+
+    .app::after {
+      content: "";
+      position: absolute;
+      inset: auto 8vw -18vh auto;
+      width: 42vw;
+      height: 42vw;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(244, 210, 122, 0.18), transparent 65%);
+      filter: blur(24px);
+      pointer-events: none;
+      transition: opacity 300ms ease, transform 300ms ease;
+    }
+
+    .glow {
+      position: absolute;
+      inset: auto -14vw -28vh auto;
+      width: 50vw;
+      height: 50vw;
+      background: radial-gradient(circle, rgba(244, 210, 122, 0.16), transparent 68%);
+      filter: blur(18px);
+      pointer-events: none;
+      opacity: 0.9;
+      transition: opacity 300ms ease, transform 300ms ease;
+    }
+
+    .app[data-live="on"]::after {
+      opacity: 0.95;
+      transform: translateY(-2vh) scale(1.06);
+    }
+
+    .app[data-live="on"] .glow {
+      opacity: 1;
+      transform: translateY(-2vh) scale(1.04);
+    }
+
+    .app[data-camera="missing"] .statusrow .pill:first-child {
+      border-color: rgba(255, 133, 120, 0.45);
+    }
+
+    .app[data-camera="missing"] .dot {
+      background: var(--danger);
+      box-shadow: 0 0 0 4px rgba(255, 133, 120, 0.12);
+    }
+
+    .topbar,
+    .panel,
+    .bottombar {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+    }
+
+    .topbar {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+      background:
+        linear-gradient(135deg, rgba(18, 26, 38, 0.95), rgba(8, 12, 18, 0.82)),
+        var(--panel);
+      border-color: rgba(255, 255, 255, 0.11);
+    }
+
+    .topbar-wrap {
+      display: grid;
+      gap: 14px;
+    }
+
+    .hero-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: grid;
+      gap: 4px;
+      max-width: 58rem;
+    }
+
+    .kicker {
+      color: var(--gold);
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .title {
+      font-size: clamp(22px, 4.4vw, 30px);
+      font-weight: 840;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      max-width: 58rem;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 12px;
+      white-space: nowrap;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .pill.link {
+      color: var(--text);
+      text-decoration: none;
+      transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+    }
+
+    .pill.link:hover {
+      transform: translateY(-1px);
+      border-color: rgba(113, 227, 199, 0.35);
+      background: rgba(113, 227, 199, 0.08);
+    }
+
+    .pill.primary {
+      border-color: rgba(245, 215, 131, 0.55);
+      background: linear-gradient(180deg, #f7df99, #d8a83d);
+      color: #1b1304;
+      font-weight: 800;
+    }
+
+    .pill.primary:hover {
+      border-color: rgba(245, 215, 131, 0.78);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--mint);
+      box-shadow: 0 0 0 4px rgba(113, 227, 199, 0.12);
+    }
+
+    .statusrow {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      gap: 8px;
+    }
+
+    .workflow-strip {
+      display: grid;
+      grid-template-columns: 0.9fr 1fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    .workflow-card {
+      padding: 13px 14px;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.025)),
+        rgba(255, 255, 255, 0.02);
+      box-shadow: var(--shadow-soft);
+      display: grid;
+      gap: 4px;
+      min-height: 88px;
+    }
+
+    .workflow-card.primary {
+      border-color: rgba(245, 215, 131, 0.36);
+      background:
+        radial-gradient(circle at 18% 12%, rgba(255, 244, 203, 0.16), transparent 28%),
+        linear-gradient(180deg, rgba(245, 215, 131, 0.20), rgba(217, 170, 63, 0.20));
+    }
+
+    .workflow-card.accent {
+      border-color: rgba(113, 227, 199, 0.34);
+      background:
+        radial-gradient(circle at 18% 12%, rgba(226, 255, 247, 0.14), transparent 28%),
+        linear-gradient(180deg, rgba(124, 233, 208, 0.18), rgba(59, 197, 165, 0.16));
+    }
+
+    .workflow-card.danger {
+      border-color: rgba(255, 133, 120, 0.32);
+      background:
+        radial-gradient(circle at 18% 12%, rgba(255, 231, 227, 0.12), transparent 28%),
+        linear-gradient(180deg, rgba(255, 133, 120, 0.16), rgba(194, 66, 57, 0.14));
+    }
+
+    .workflow-card span {
+      color: var(--gold);
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .workflow-card strong {
+      font-size: 14px;
+    }
+
+    .workflow-card small {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .workspace {
+      display: grid;
+      gap: var(--gap);
+      min-height: 0;
+    }
+
+    .live-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: calc(var(--radius) + 10px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background:
+        radial-gradient(circle at 16% 18%, rgba(113, 227, 199, 0.10), transparent 26%),
+        radial-gradient(circle at 86% 12%, rgba(245, 215, 131, 0.08), transparent 24%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.016)),
+        #05070b;
+      box-shadow: var(--shadow);
+      min-height: clamp(480px, 70vh, 860px);
+    }
+
+    .live-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 50% 10%, rgba(255, 255, 255, 0.06), transparent 32%),
+        radial-gradient(circle at 12% 90%, rgba(113, 227, 199, 0.08), transparent 22%);
+      z-index: 1;
+      mix-blend-mode: screen;
+    }
+
+    .live-card::after {
+      content: "";
+      position: absolute;
+      left: 24px;
+      top: 24px;
+      width: 120px;
+      height: 3px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(113, 227, 199, 0.95), rgba(245, 215, 131, 0.95));
+      box-shadow: 0 0 26px rgba(113, 227, 199, 0.35);
+      z-index: 2;
+    }
+
+    .live-frame {
+      width: 100%;
+      aspect-ratio: var(--aspect);
+      display: block;
+      background: linear-gradient(135deg, #0d1724, #09111a 38%, #1a2230 100%);
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 12px;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .overlay-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .action-dock {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: auto;
+      pointer-events: auto;
+      z-index: 3;
+    }
+
+    .dock-shell {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: 14px;
+      display: grid;
+      gap: 10px;
+      z-index: 3;
+    }
+
+    .dock-status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 12px 14px;
+      border-radius: 18px;
+      background: rgba(7, 11, 18, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      backdrop-filter: blur(12px);
+    }
+
+    .dock-status strong {
+      font-size: 14px;
+    }
+
+    .dock-status span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      background: rgba(7, 11, 18, 0.68);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 12px;
+      backdrop-filter: blur(12px);
+    }
+
+    .badge strong {
+      font-size: 13px;
+    }
+
+    .side {
+      display: grid;
+      gap: var(--gap);
+    }
+
+    .panel {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .section-title h2 {
+      margin: 0;
+      font-size: 15px;
+      letter-spacing: -0.01em;
+    }
+
+    .section-title span,
+    .mini label {
+      color: var(--muted);
+    }
+
+    .section-title span {
+      font-size: 12px;
+    }
+
+    .command-note {
+      padding: 12px 13px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .btn {
+      min-height: var(--button-h);
+      padding: 12px 14px;
+      border: 0;
+      border-radius: 18px;
+      color: var(--text);
+      font-weight: 780;
+      font-size: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 2px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.03));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
+      touch-action: manipulation;
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+    }
+
+    .btn strong {
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    .btn span {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 650;
+      line-height: 1.2;
+    }
+
+    .btn:active {
+      transform: translateY(1px) scale(0.995);
+    }
+
+    .btn:hover {
+      border-color: rgba(255, 255, 255, 0.18);
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.30);
+    }
+
+    .dock-btn {
+      min-height: var(--button-h);
+      padding: 12px 14px;
+      justify-content: center;
+      align-items: flex-start;
+      text-transform: none;
+      letter-spacing: 0;
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.03)),
+        rgba(255, 255, 255, 0.04);
+    }
+
+    .dock-btn strong {
+      font-size: 14px;
+      letter-spacing: 0.06em;
+    }
+
+    .dock-btn small {
+      color: inherit;
+      font-size: 11px;
+      opacity: 0.76;
+      font-weight: 650;
+    }
+
+    .dock-btn.primary {
+      box-shadow: 0 18px 38px rgba(217, 168, 61, 0.28);
+    }
+
+    .btn.primary {
+      background: linear-gradient(180deg, #f7df99, #d8a83d);
+      color: #1b1304;
+      border-color: rgba(255, 221, 133, 0.62);
+    }
+
+    .btn.primary span {
+      color: rgba(27, 19, 4, 0.72);
+    }
+
+    .btn.accent {
+      background: linear-gradient(180deg, #7ce9d0, #3bc5a5);
+      color: #062117;
+      border-color: rgba(124, 233, 208, 0.5);
+    }
+
+    .btn.accent span {
+      color: rgba(6, 33, 23, 0.74);
+    }
+
+    .btn.danger {
+      background: linear-gradient(180deg, rgba(255, 133, 120, 0.95), rgba(194, 66, 57, 0.98));
+      color: #fff8f6;
+      border-color: rgba(255, 133, 120, 0.55);
+    }
+
+    .btn.danger span {
+      color: rgba(255, 248, 246, 0.72);
+    }
+
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .mini {
+      min-height: 74px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.035);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .mini strong {
+      font-size: 14px;
+    }
+
+    .perf-breakdown {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .perf-step {
+      min-height: 66px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.035);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .perf-step label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .perf-step strong {
+      font-size: 16px;
+    }
+
+    .perf-step span {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .bottombar {
+      padding: 12px 14px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 12px;
+      align-items: center;
+    }
+
+    .bottombar code {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 3px 8px;
+      border-radius: 999px;
+    }
+
+    .footer-link {
+      color: var(--text);
+      text-decoration: none;
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.04);
+      white-space: nowrap;
+    }
+
+    .action-dock {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: auto;
+      pointer-events: auto;
+      z-index: 3;
+    }
+
+    .dock-shell {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: 14px;
+      display: grid;
+      gap: 10px;
+      z-index: 3;
+    }
+
+    .dock-status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 12px 14px;
+      border-radius: 18px;
+      background: rgba(7, 11, 18, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      backdrop-filter: blur(12px);
+    }
+
+    .dock-status strong {
+      font-size: 14px;
+    }
+
+    .dock-status span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .portrait-only {
+      display: block;
+    }
+
+    .landscape-only {
+      display: none;
+    }
+
+    @media (orientation: landscape) {
+      :root {
+        --aspect: 16 / 9;
+      }
+
+      .app {
+        grid-template-columns: 1.48fr 0.82fr;
+        grid-template-rows: auto 1fr;
+        grid-template-areas:
+          "top top"
+          "live side";
+      }
+
+      .topbar {
+        grid-area: top;
+      }
+
+      .workspace {
+        grid-area: live;
+      }
+
+      .side {
+        grid-area: side;
+        align-content: start;
+        position: sticky;
+        top: 12px;
+        max-height: calc(100vh - 24px);
+        overflow: auto;
+        padding-right: 2px;
+      }
+
+      .portrait-only {
+        display: none;
+      }
+
+      .landscape-only {
+        display: block;
+      }
+
+      .mini-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .dock-shell {
+        left: 18px;
+        right: 18px;
+        bottom: 18px;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .topbar {
+        padding: 14px;
+      }
+
+      .hero-row {
+        align-items: flex-start;
+      }
+
+      .statusrow {
+        justify-content: flex-start;
+      }
+
+      .perf-breakdown {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 430px) {
+      .app {
+        padding: 10px;
+        gap: 10px;
+      }
+
+      .btn {
+        min-height: 58px;
+      }
+
+      .control-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .mini-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .perf-breakdown {
+        grid-template-columns: 1fr;
+      }
+
+      .action-dock {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .dock-btn.primary {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .live-frame {
+        transition: opacity 160ms ease, filter 220ms ease, transform 220ms ease;
+      }
+
+      .live-frame.updating {
+        opacity: 0.82;
+        transform: scale(0.995);
+        filter: saturate(0.95) contrast(1.04);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="glow"></div>
+    <header class="topbar">
+      <div class="topbar-wrap">
+        <div class="hero-row">
+          <div class="brand">
+            <div class="kicker">D810 Remote Hub</div>
+            <div class="title">Opal Control Panel</div>
+            <div class="subtitle">Fast capture lane for the D810. Stay live in wide mode, shoot in one tap, and keep the feedback tight.</div>
+          </div>
+          <div class="hero-actions">
+            <a class="pill link" href="/remote-ui/shot-preview.html">Shot Preview</a>
+            <a class="pill link" href="/remote-ui/0716-1.html">Refresh UI</a>
+          </div>
+        </div>
+        <div class="statusrow">
+          <div class="pill"><span class="dot"></span><span id="connState">Checking...</span></div>
+          <div class="pill">Mode: <strong id="modeState">Portrait</strong></div>
+          <div class="pill">Frame: <strong id="frameRate">manual</strong></div>
+          <div class="pill">Perf: <strong id="perfState">--</strong></div>
+          <div class="pill">Status: <strong id="actionState">idle</strong></div>
+        </div>
+        <div class="perf-breakdown">
+          <div class="perf-step"><label>D810</label><strong id="perfD810">--</strong><span id="perfD810Hint">capture</span></div>
+          <div class="perf-step"><label>ddserver</label><strong id="perfDdserver">--</strong><span id="perfDdserverHint">prep</span></div>
+          <div class="perf-step"><label>Bridge</label><strong id="perfBridge">--</strong><span id="perfBridgeHint">write</span></div>
+          <div class="perf-step"><label>UI</label><strong id="perfUi">--</strong><span id="perfUiHint">display</span></div>
+        </div>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="live-card">
+        <canvas id="liveFrame" class="live-frame" width="1600" height="1067" aria-label="Live view"></canvas>
+        <div class="overlay">
+          <div class="overlay-row">
+            <div class="badge">Live view <strong id="liveHint">portrait preview</strong></div>
+            <div class="badge">Last update <strong id="lastUpdate">--:--:--</strong></div>
+          </div>
+          <div class="overlay-row">
+            <div class="badge">AF: <strong id="afState">ready</strong></div>
+            <div class="badge">Exposure: <strong id="expState">auto</strong></div>
+          </div>
+          <div class="dock-shell">
+            <div class="dock-status">
+              <div>
+                <strong>Capture Dock</strong>
+                <span>primary controls stay within thumb reach</span>
+              </div>
+              <div class="pill">Mode: <strong id="modeStateDock">Portrait</strong></div>
+            </div>
+            <div class="action-dock">
+              <button class="btn accent dock-btn" data-action="af"><strong>AF</strong><small>lock focus</small></button>
+              <button class="btn primary dock-btn" data-action="shutter"><strong>SHOT</strong><small>capture now</small></button>
+              <button class="btn dock-btn" data-action="refresh"><strong>FRAME</strong><small>refresh preview</small></button>
+              <button class="btn danger dock-btn" data-action="live-off"><strong>STOP</strong><small>end live</small></button>
+              <button class="btn dock-btn" data-action="live-on"><strong>LIVE</strong><small>start stream</small></button>
+              <button class="btn dock-btn" data-action="status"><strong>SYNC</strong><small>poll body</small></button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <aside class="side">
+      <section class="panel">
+        <div class="section-title"><h2>Status</h2><span>OpenWrt hooks</span></div>
+        <div class="mini-grid">
+          <div class="mini"><label>Connection</label><strong id="statusConn">D810 connected</strong></div>
+          <div class="mini"><label>Frame source</label><strong id="statusSource">bridge /cgi-bin/liveview</strong></div>
+          <div class="mini"><label>Refresh</label><strong id="statusRefresh">manual refresh</strong></div>
+          <div class="mini"><label>Frame type</label><strong id="frameType">--</strong></div>
+          <div class="mini"><label>D810 FPS</label><strong id="fpsSource">--</strong></div>
+          <div class="mini"><label>UI FPS</label><strong id="fpsUi">--</strong></div>
+        </div>
+        <div class="mini" style="min-height:52px;">
+          <label>Last action</label>
+          <strong id="lastAction">none</strong>
+        </div>
+        <div class="command-note">The UI reacts to connection, mode, and frame timing separately, so you can tell at a glance whether the body, bridge, or browser is the bottleneck.</div>
+      </section>
+    </aside>
+
+    <footer class="bottombar">
+      <span>Portrait = remote / Landscape = live mode</span>
+      <span>
+        <a class="footer-link" href="/remote-ui/shot-preview.html">Open shot preview</a>
+        API: <code>/cgi-bin/liveview</code> <code>/cgi-bin/action</code> <code>/cgi-bin/liveview-start</code> <code>/cgi-bin/liveview-stop</code>
+      </span>
+    </footer>
+  </div>
+
+  <script>
+    const liveFrame = document.getElementById("liveFrame");
+    const frameRate = document.getElementById("frameRate");
+    const lastUpdate = document.getElementById("lastUpdate");
+    const modeState = document.getElementById("modeState");
+    const liveHint = document.getElementById("liveHint");
+    const statusRefresh = document.getElementById("statusRefresh");
+    const connState = document.getElementById("connState");
+    const modeStateDock = document.getElementById("modeStateDock");
+    const statusConn = document.getElementById("statusConn");
+    const statusSource = document.getElementById("statusSource");
+    const frameType = document.getElementById("frameType");
+    const fpsSource = document.getElementById("fpsSource");
+    const fpsUi = document.getElementById("fpsUi");
+    const afState = document.getElementById("afState");
+    const expState = document.getElementById("expState");
+    const perfState = document.getElementById("perfState");
+    const perfD810 = document.getElementById("perfD810");
+    const perfDdserver = document.getElementById("perfDdserver");
+    const perfBridge = document.getElementById("perfBridge");
+    const perfUi = document.getElementById("perfUi");
+    const perfD810Hint = document.getElementById("perfD810Hint");
+    const perfDdserverHint = document.getElementById("perfDdserverHint");
+    const perfBridgeHint = document.getElementById("perfBridgeHint");
+    const perfUiHint = document.getElementById("perfUiHint");
+    const actionState = document.getElementById("actionState");
+    const lastAction = document.getElementById("lastAction");
+    const appRoot = document.querySelector(".app");
+    const BOOT_TOKEN = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const API = {
+      status: `/cgi-bin/status?boot=${BOOT_TOKEN}`,
+      liveview: `/cgi-bin/liveview?boot=${BOOT_TOKEN}`,
+      action: "/cgi-bin/action",
+    };
+
+    const actionAliases = {
+      mute: "live-off",
+      "live-auto": "live-on",
+      "live-fast": "status",
+      "live-slow": "refresh",
+    };
+
+    let requestTraceSeq = 0;
+    let liveTimer = 0;
+    let liveMode = false;
+    let liveTransport = "snapshot";
+    let liveSocket = null;
+    let liveSocketMeta = null;
+    let liveSocketReconnectTimer = 0;
+    let liveFrameToken = 0;
+    let currentFrameSeq = 0;
+    const LIVE_FRAME_DELAY_MS = 140;
+    const LIVE_PENDING_DELAY_MS = 320;
+    const LIVE_RETRY_DELAY_MS = 420;
+    const LIVE_INITIAL_DELAY_MS = 220;
+    const LIVE_WS_CONNECT_TIMEOUT_MS = 2500;
+    const LIVE_WS_RECONNECT_DELAY_MS = 900;
+    const LIVE_WS_PORT = 8091;
+    const PLACEHOLDER_W = 1600;
+    const PLACEHOLDER_H = 1067;
+    const liveFrameCtx = liveFrame.getContext("2d", { alpha: false, desynchronized: true });
+    const FPS_WINDOW_MS = 1000;
+    let liveRenderBusy = false;
+    let pendingFramePacket = null;
+    let latestEnqueuedSeq = 0;
+    let sourceFrameTimes = [];
+    let uiFrameTimes = [];
+    let lastSourceCaptureDoneAt = 0;
+    let currentSourceFps = null;
+    let currentUiFps = null;
+
+    function formatMs(value) {
+      return Number.isFinite(value) ? `${Math.max(0, Math.round(value))}ms` : "--";
+    }
+
+    function toNumber(value) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function formatFps(value) {
+      return Number.isFinite(value) && value >= 0 ? `${value.toFixed(1)} fps` : "--";
+    }
+
+    function pushFrameTime(queue, timestamp, windowMs = FPS_WINDOW_MS) {
+      if (!Number.isFinite(timestamp) || timestamp <= 0) {
+        return null;
+      }
+      queue.push(timestamp);
+      const minTime = timestamp - windowMs;
+      while (queue.length && queue[0] < minTime) {
+        queue.shift();
+      }
+      if (queue.length < 2) {
+        return 0;
+      }
+      const span = queue[queue.length - 1] - queue[0];
+      if (span <= 0) {
+        return 0;
+      }
+      return ((queue.length - 1) * 1000) / span;
+    }
+
+    function updateFpsDisplays() {
+      fpsSource.textContent = formatFps(currentSourceFps);
+      fpsUi.textContent = formatFps(currentUiFps);
+    }
+
+    function resetFpsDisplays() {
+      sourceFrameTimes = [];
+      uiFrameTimes = [];
+      lastSourceCaptureDoneAt = 0;
+      currentSourceFps = null;
+      currentUiFps = null;
+      updateFpsDisplays();
+    }
+
+    function updatePerfBreakdown(parts = {}) {
+      const d810Ms = toNumber(parts.d810Ms);
+      const ddserverMs = toNumber(parts.ddserverMs);
+      const bridgeMs = toNumber(parts.bridgeMs);
+      const uiMs = toNumber(parts.uiMs);
+      perfD810.textContent = formatMs(d810Ms);
+      perfDdserver.textContent = formatMs(ddserverMs);
+      perfBridge.textContent = formatMs(bridgeMs);
+      perfUi.textContent = formatMs(uiMs);
+      perfD810Hint.textContent = `capture${parts.captureBytes ? ` / ${parts.captureBytes}B` : ""}`;
+      perfDdserverHint.textContent = "prep + device hop";
+      perfBridgeHint.textContent = "cache / handoff";
+      perfUiHint.textContent = parts.uiHint || "fetch + decode";
+    }
+
+    function syncUiMood() {
+      appRoot.dataset.live = liveMode ? "on" : "off";
+      appRoot.dataset.camera = statusConn.textContent.toLowerCase().includes("missing") ? "missing" : "ready";
+    }
+
+    function websocketUrl() {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      return `${proto}://${location.hostname}:${LIVE_WS_PORT}/live`;
+    }
+
+    function clearLiveSocketReconnect() {
+      if (liveSocketReconnectTimer) {
+        clearTimeout(liveSocketReconnectTimer);
+        liveSocketReconnectTimer = 0;
+      }
+    }
+
+    function roundRect(ctx, x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+    }
+
+    function drawPlaceholder() {
+      const width = PLACEHOLDER_W;
+      const height = PLACEHOLDER_H;
+      if (liveFrame.width !== width || liveFrame.height !== height) {
+        liveFrame.width = width;
+        liveFrame.height = height;
+      }
+      const gradient = liveFrameCtx.createLinearGradient(0, 0, width, height);
+      gradient.addColorStop(0, "#0f1722");
+      gradient.addColorStop(0.55, "#081018");
+      gradient.addColorStop(1, "#202f42");
+      liveFrameCtx.fillStyle = gradient;
+      liveFrameCtx.fillRect(0, 0, width, height);
+      liveFrameCtx.fillStyle = "rgba(244,210,122,0.10)";
+      liveFrameCtx.beginPath();
+      liveFrameCtx.arc(1280, 170, 160, 0, Math.PI * 2);
+      liveFrameCtx.fill();
+      liveFrameCtx.fillStyle = "rgba(113,227,199,0.08)";
+      liveFrameCtx.beginPath();
+      liveFrameCtx.arc(330, 860, 260, 0, Math.PI * 2);
+      liveFrameCtx.fill();
+      liveFrameCtx.strokeStyle = "rgba(255,255,255,0.12)";
+      liveFrameCtx.lineWidth = 4;
+      liveFrameCtx.setLineDash([18, 16]);
+      roundRect(liveFrameCtx, 70, 280, 1460, 610, 34);
+      liveFrameCtx.stroke();
+      liveFrameCtx.setLineDash([]);
+      liveFrameCtx.fillStyle = "rgba(237,244,255,0.85)";
+      liveFrameCtx.font = "54px Arial, sans-serif";
+      liveFrameCtx.fillText("Live View Ready", 80, 160);
+      liveFrameCtx.fillStyle = "rgba(159,176,199,0.8)";
+      liveFrameCtx.font = "26px Arial, sans-serif";
+      liveFrameCtx.fillText("Open Live On to start the frame stream", 80, 220);
+    }
+
+    function fitCanvas(bitmapWidth, bitmapHeight) {
+      if (!bitmapWidth || !bitmapHeight) {
+        return;
+      }
+      if (liveFrame.width !== bitmapWidth || liveFrame.height !== bitmapHeight) {
+        liveFrame.width = bitmapWidth;
+        liveFrame.height = bitmapHeight;
+      }
+    }
+
+    function drawBitmapCover(bitmap) {
+      const canvasWidth = liveFrame.width;
+      const canvasHeight = liveFrame.height;
+      const srcWidth = bitmap.width || canvasWidth;
+      const srcHeight = bitmap.height || canvasHeight;
+      const scale = Math.max(canvasWidth / srcWidth, canvasHeight / srcHeight);
+      const drawWidth = srcWidth * scale;
+      const drawHeight = srcHeight * scale;
+      const dx = (canvasWidth - drawWidth) / 2;
+      const dy = (canvasHeight - drawHeight) / 2;
+      liveFrameCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+      liveFrameCtx.drawImage(bitmap, dx, dy, drawWidth, drawHeight);
+    }
+
+    function trackFrameRates(captureDoneAt, renderedAt) {
+      if (Number.isFinite(captureDoneAt) && captureDoneAt > 0 && captureDoneAt !== lastSourceCaptureDoneAt) {
+        lastSourceCaptureDoneAt = captureDoneAt;
+        currentSourceFps = pushFrameTime(sourceFrameTimes, captureDoneAt);
+      }
+      if (Number.isFinite(renderedAt) && renderedAt > 0) {
+        currentUiFps = pushFrameTime(uiFrameTimes, renderedAt);
+      }
+      updateFpsDisplays();
+    }
+
+    function finishRenderedFrame(frame = {}) {
+      const requestedAt = Number(frame.requestStartedAt || 0);
+      if (!requestedAt) {
+        return;
+      }
+      const fetchDoneAt = Number(frame.fetchDoneAt || requestedAt);
+      const renderStartedAt = Number(frame.renderStartedAt || fetchDoneAt);
+      const now = performance.now();
+      const captureDoneAt = Number(frame.captureDoneAt || 0);
+      const serverTotal = frame.serverTotalMs ?? "--";
+      const serverPrep = frame.serverPrepMs ?? "--";
+      const serverCapture = frame.serverCaptureMs ?? "--";
+      const serverWrite = frame.serverWriteMs ?? "--";
+      const responseType = frame.responseContentType || "";
+      const transportKind = frame.transportKind || "snapshot";
+      const responseBytes = frame.responseBytes || "";
+      const fetchMs = Math.max(0, Math.round(fetchDoneAt - requestedAt));
+      const renderMs = Math.max(0, Math.round(now - renderStartedAt));
+      const totalMs = Math.max(0, Math.round(now - requestedAt));
+      const serverTotalMs = toNumber(serverTotal);
+      const serverPrepMs = toNumber(serverPrep);
+      const serverCaptureMs = toNumber(serverCapture);
+      const serverWriteMs = toNumber(serverWrite);
+      const clientUiMs = Math.max(0, totalMs - (serverTotalMs || 0));
+      const frameAgeMs = captureDoneAt > 0 ? Math.max(0, Math.round(Date.now() - captureDoneAt)) : null;
+      const isRealJpeg = responseType.toLowerCase().startsWith("image/jpeg");
+      statusConn.textContent = isRealJpeg ? "D810 detected" : "Live preview pending";
+      frameType.textContent = responseType ? `${responseType}${responseBytes ? ` (${responseBytes}B)` : ""}` : "--";
+      trackFrameRates(captureDoneAt, Date.now());
+      if (transportKind === "websocket") {
+        perfState.textContent = `ws cap ${serverCapture}ms prep ${serverPrep}ms bridge ${serverWrite}ms ui ${totalMs}ms`;
+        updatePerfBreakdown({
+          d810Ms: serverCaptureMs,
+          ddserverMs: serverPrepMs,
+          bridgeMs: serverWriteMs,
+          uiMs: totalMs,
+          uiHint: `decode ${renderMs}ms`,
+          captureBytes: responseBytes,
+        });
+      } else {
+        perfState.textContent = `srv prep ${serverPrep} cap ${serverCapture} write ${serverWrite} total ${serverTotal}ms age ${frameAgeMs ?? "--"}ms net ${fetchMs}ms dec ${renderMs}ms total ${totalMs}ms`;
+        updatePerfBreakdown({
+          d810Ms: serverCaptureMs,
+          ddserverMs: serverPrepMs,
+          bridgeMs: serverWriteMs,
+          uiMs: clientUiMs,
+          uiHint: `net ${fetchMs}ms + dec ${renderMs}ms`,
+          captureBytes: responseBytes,
+        });
+      }
+      stampTime();
+    }
+
+    async function renderFramePacket(packet) {
+      const frame = {
+        requestStartedAt: packet.requestStartedAt,
+        fetchDoneAt: packet.fetchDoneAt,
+        renderStartedAt: performance.now(),
+        serverPrepMs: packet.meta.prepMs ?? "",
+        captureDoneAt: packet.meta.captureDoneAt ?? "",
+        serverTotalMs: packet.meta.totalMs ?? "",
+        serverCaptureMs: packet.meta.captureMs ?? "",
+        serverWriteMs: packet.meta.writeMs ?? "",
+        responseContentType: packet.contentType || "image/jpeg",
+        responseBytes: String(packet.bytes || ""),
+        transportKind: packet.transportKind || "snapshot",
+      };
+      const bitmap = await createImageBitmap(packet.blob);
+      if (packet.seq !== latestEnqueuedSeq) {
+        bitmap.close();
+        return;
+      }
+      fitCanvas(bitmap.width, bitmap.height);
+      drawBitmapCover(bitmap);
+      bitmap.close();
+      finishRenderedFrame(frame);
+    }
+
+    function schedulePendingFrameRender() {
+      if (liveRenderBusy || !pendingFramePacket) {
+        return;
+      }
+      const packet = pendingFramePacket;
+      pendingFramePacket = null;
+      liveRenderBusy = true;
+      liveFrame.classList.add("updating");
+      requestAnimationFrame(async () => {
+        try {
+          await renderFramePacket(packet);
+        } catch (error) {
+          perfState.textContent = "err";
+          updatePerfBreakdown();
+          actionState.textContent = "frame failed";
+          lastAction.textContent = String(error.message || error);
+          stampTime();
+        } finally {
+          liveFrame.classList.remove("updating");
+          liveRenderBusy = false;
+          if (pendingFramePacket) {
+            schedulePendingFrameRender();
+          }
+        }
+      });
+    }
+
+    function enqueueFrameRender(blob, meta = {}, options = {}) {
+      pendingFramePacket = {
+        seq: ++latestEnqueuedSeq,
+        blob,
+        meta,
+        requestStartedAt: options.requestStartedAt ?? performance.now(),
+        fetchDoneAt: options.fetchDoneAt ?? performance.now(),
+        contentType: options.contentType || "image/jpeg",
+        bytes: options.bytes ?? blob.size ?? 0,
+        transportKind: options.transportKind || "snapshot",
+      };
+      schedulePendingFrameRender();
+    }
+
+    function closeLiveSocket() {
+      clearLiveSocketReconnect();
+      liveSocketMeta = null;
+      if (!liveSocket) {
+        return;
+      }
+      const socket = liveSocket;
+      liveSocket = null;
+      try {
+        socket.onopen = null;
+        socket.onmessage = null;
+        socket.onerror = null;
+        socket.onclose = null;
+        socket.close();
+      } catch (_) {}
+    }
+
+    function scheduleLiveSocketReconnect(delayMs = LIVE_WS_RECONNECT_DELAY_MS) {
+      if (!liveMode) {
+        return;
+      }
+      clearLiveSocketReconnect();
+      liveSocketReconnectTimer = setTimeout(async () => {
+        liveSocketReconnectTimer = 0;
+        if (!liveMode || liveSocket) {
+          return;
+        }
+        const connected = await startLiveSocket();
+        if (!connected && liveMode) {
+          liveTransport = "snapshot";
+          scheduleLiveFrame(LIVE_RETRY_DELAY_MS);
+        }
+      }, delayMs);
+    }
+
+    function applyStreamFrame(frameBlob, meta = {}) {
+      const receivedAt = performance.now();
+      const captureMs = toNumber(meta.captureMs);
+      const prepMs = toNumber(meta.prepMs);
+      const writeMs = toNumber(meta.writeMs);
+      const totalMs = toNumber(meta.totalMs);
+      frameType.textContent = `image/jpeg${frameBlob.size ? ` (${frameBlob.size}B)` : ""}`;
+      perfState.textContent = `ws prep ${meta.prepMs ?? "--"} cap ${meta.captureMs ?? "--"} write ${meta.writeMs ?? "--"} srv ${meta.totalMs ?? "--"}ms`;
+      updatePerfBreakdown({
+        d810Ms: captureMs,
+        ddserverMs: prepMs,
+        bridgeMs: writeMs,
+        uiMs: null,
+        uiHint: "decode / paint",
+        captureBytes: frameBlob.size || meta.bytes || null,
+      });
+      statusSource.textContent = `Bridge ${websocketUrl()}`;
+      statusConn.textContent = "D810 detected";
+      actionState.textContent = "ws live";
+      enqueueFrameRender(frameBlob, meta, {
+        requestStartedAt: receivedAt,
+        fetchDoneAt: receivedAt,
+        contentType: "image/jpeg",
+        bytes: frameBlob.size || meta.bytes || 0,
+        transportKind: "websocket",
+      });
+    }
+
+    function startLiveSocket() {
+      closeLiveSocket();
+      liveTransport = "websocket";
+      statusSource.textContent = `Bridge ${websocketUrl()}`;
+      return new Promise((resolve) => {
+        let settled = false;
+        const socket = new WebSocket(websocketUrl());
+        liveSocket = socket;
+        socket.binaryType = "arraybuffer";
+
+        const finish = (connected) => {
+          if (!settled) {
+            settled = true;
+            resolve(connected);
+          }
+        };
+
+        const timer = setTimeout(() => {
+          if (liveSocket === socket) {
+            try {
+              socket.close();
+            } catch (_) {}
+          }
+          finish(false);
+        }, LIVE_WS_CONNECT_TIMEOUT_MS);
+
+        socket.onopen = () => {
+          clearTimeout(timer);
+          if (liveSocket !== socket) {
+            finish(false);
+            return;
+          }
+          statusSource.textContent = `Bridge ${websocketUrl()}`;
+          actionState.textContent = "ws live";
+          finish(true);
+        };
+
+        socket.onmessage = (event) => {
+          if (typeof event.data === "string") {
+            try {
+              liveSocketMeta = JSON.parse(event.data);
+            } catch (_) {
+              liveSocketMeta = null;
+            }
+            return;
+          }
+          const meta = liveSocketMeta || {};
+          liveSocketMeta = null;
+          const frameBlob = event.data instanceof Blob ? event.data : new Blob([event.data], { type: "image/jpeg" });
+          applyStreamFrame(frameBlob, meta);
+        };
+
+        socket.onerror = () => {
+          clearTimeout(timer);
+          finish(false);
+        };
+
+        socket.onclose = () => {
+          clearTimeout(timer);
+          if (liveSocket === socket) {
+            liveSocket = null;
+          }
+          finish(false);
+          if (liveMode) {
+            statusSource.textContent = "Bridge reconnecting...";
+            scheduleLiveSocketReconnect();
+          }
+        };
+      });
+    }
+
+    function isLandscape() {
+      return window.matchMedia("(orientation: landscape)").matches;
+    }
+
+    function stampTime() {
+      lastUpdate.textContent = new Date().toLocaleTimeString("ko-KR", { hour12: false });
+    }
+
+    function setModeLabel() {
+      const landscape = isLandscape();
+      modeState.textContent = landscape ? "Landscape" : "Portrait";
+      if (modeStateDock) {
+        modeStateDock.textContent = landscape ? "Landscape" : "Portrait";
+      }
+      liveHint.textContent = landscape ? "live view" : "single-frame preview";
+      document.documentElement.style.setProperty("--aspect", landscape ? "16 / 9" : "3 / 2");
+      connState.textContent = landscape ? "Live view active" : "Camera linked";
+      expState.textContent = landscape ? "live view" : "auto";
+      syncUiMood();
+    }
+
+    function setError(message) {
+      actionState.textContent = "error";
+      lastAction.textContent = message;
+      statusConn.textContent = "UI error";
+      syncUiMood();
+    }
+
+    async function fetchJson(url, options = {}) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      try {
+        const traceId = `${Date.now().toString(36)}-${(++requestTraceSeq).toString(36)}`;
+        const headers = new Headers(options.headers || {});
+        headers.set("X-D810-Client", "ui");
+        headers.set("X-D810-Trace", traceId);
+        headers.set("X-D810-Event", url.includes("/action") ? "action" : url.includes("/status") ? "status" : url.includes("/session-manager") ? "boot" : "json");
+        headers.set("X-D810-Url", url);
+        if (options.uiAt != null) {
+          headers.set("X-D810-Ui-At", String(options.uiAt));
+        }
+        if (options.uiStage) {
+          headers.set("X-D810-Ui-Stage", String(options.uiStage));
+        }
+        if (options.uiAction) {
+          headers.set("X-D810-Ui-Action", String(options.uiAction));
+        }
+        const response = await fetch(url, {
+          cache: "no-store",
+          ...options,
+          signal: controller.signal,
+          headers,
+        });
+        const raw = await response.text();
+        let data;
+        try {
+          data = JSON.parse(raw);
+        } catch (_) {
+          throw new Error(`bad JSON from ${url}: ${raw.slice(0, 120)}`);
+        }
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status} from ${url}`);
+        }
+        return data;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    async function refreshStatus() {
+      try {
+        const data = await fetchJson(API.status);
+        const softwareReady = data.softwareReady === true
+          || data.status === "ready"
+          || data.status === "liveview_on";
+        if (softwareReady || data.cameraDetected) {
+          statusConn.textContent = "D810 detected";
+          actionState.textContent = data.liveView ? "live view ready" : "camera ready";
+          frameRate.textContent = data.liveView || liveMode ? "live" : "manual";
+          statusRefresh.textContent = data.liveView || liveMode ? "live view" : "manual refresh";
+          if (data.totalMs !== undefined) {
+            const frameAgeMs = data.captureDoneAt ? Math.max(0, Math.round(Date.now() - Number(data.captureDoneAt))) : null;
+            perfState.textContent = `srv prep ${data.prepMs ?? "--"} cap ${data.captureMs ?? "--"} write ${data.writeMs ?? "--"} total ${data.totalMs ?? "--"}ms age ${frameAgeMs ?? "--"}ms`;
+            updatePerfBreakdown({
+              d810Ms: toNumber(data.captureMs),
+              ddserverMs: toNumber(data.prepMs),
+              bridgeMs: toNumber(data.writeMs),
+              uiMs: null,
+              uiHint: "waiting for frame draw",
+              captureBytes: toNumber(data.bytes),
+            });
+          }
+          if (data.liveView) {
+            liveHint.textContent = "live view";
+          }
+          if (isLandscape() && !liveMode) {
+            await runAction("live-on");
+          }
+        } else {
+          statusConn.textContent = "Camera missing";
+          actionState.textContent = "camera missing";
+        }
+        syncUiMood();
+      } catch (error) {
+        statusConn.textContent = "Status unavailable";
+        actionState.textContent = "offline";
+        updatePerfBreakdown();
+        lastAction.textContent = String(error.message || error);
+        syncUiMood();
+      }
+    }
+
+    function clearVolatileInspectionState() {
+      try {
+        sessionStorage.removeItem("d810-shot-preview-dataurl");
+        sessionStorage.removeItem("d810-shot-preview-at");
+      } catch (_) {}
+    }
+
+    function isReloadNavigation() {
+      try {
+        const nav = performance.getEntriesByType("navigation")[0];
+        if (nav && nav.type === "reload") {
+          return true;
+        }
+      } catch (_) {}
+      return performance.navigation && performance.navigation.type === 1;
+    }
+
+    function stopLiveLoop() {
+      liveMode = false;
+      if (liveTimer) {
+        clearTimeout(liveTimer);
+        liveTimer = 0;
+      }
+      closeLiveSocket();
+      pendingFramePacket = null;
+      liveRenderBusy = false;
+      resetFpsDisplays();
+      frameRate.textContent = "manual";
+      statusRefresh.textContent = "manual refresh";
+      syncUiMood();
+    }
+
+    function scheduleLiveFrame(delayMs = 0) {
+      if (!liveMode || liveTransport === "websocket") {
+        return;
+      }
+      if (liveTimer) {
+        clearTimeout(liveTimer);
+      }
+      liveTimer = setTimeout(() => {
+        if (liveMode) {
+          refreshFrame({ live: true });
+        }
+      }, delayMs);
+    }
+
+    async function startLiveLoop(options = {}) {
+      const ensure = options.ensure !== false;
+      const initialDelayMs = Number.isFinite(options.initialDelayMs) ? options.initialDelayMs : LIVE_INITIAL_DELAY_MS;
+      if (liveTimer) {
+        clearTimeout(liveTimer);
+        liveTimer = 0;
+      }
+      liveMode = true;
+      frameRate.textContent = "live";
+      statusRefresh.textContent = "live view";
+      syncUiMood();
+      try {
+        if (ensure) {
+          await ensureLiveviewOn();
+        }
+        const wsConnected = await startLiveSocket();
+        if (wsConnected) {
+          return;
+        }
+        liveTransport = "snapshot";
+        if (initialDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, initialDelayMs));
+        }
+        await refreshFrame({ live: true });
+      } catch (error) {
+        actionState.textContent = "live view active";
+        lastAction.textContent = `live start: ${String(error.message || error)}`;
+        liveMode = false;
+        stopLiveLoop();
+      }
+    }
+
+    async function ensureLiveviewOn() {
+      const payload = await fetchJson(`${API.action}?action=live-on`);
+      if (!payload.ok && payload.status !== "liveview_on") {
+        throw new Error(payload.status || "liveview_on_failed");
+      }
+      return payload;
+    }
+
+    async function refreshFrame(options = {}) {
+      const label = options.live ? "live view" : "manual refresh";
+      const seq = ++currentFrameSeq;
+      statusRefresh.textContent = label;
+      actionState.textContent = options.live ? "live view" : "updated";
+      lastAction.textContent = options.live ? "live frame updated" : "frame updated";
+      statusSource.textContent = "bridge /cgi-bin/liveview";
+      syncUiMood();
+      liveFrame.classList.add("updating");
+      const requestedAt = performance.now();
+      try {
+        const traceId = `${Date.now().toString(36)}-${(++requestTraceSeq).toString(36)}`;
+        const response = await fetch(`${API.liveview}?ts=${Date.now()}`, {
+          cache: "no-store",
+          headers: {
+            "X-D810-Client": "ui",
+            "X-D810-Trace": traceId,
+            "X-D810-Event": "liveview",
+          },
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const fetchDoneAt = performance.now();
+        const serverTotalMs = response.headers.get("X-D810-Total-Ms") || "";
+        const serverPrepMs = response.headers.get("X-D810-Prep-Ms") || "";
+        const serverCaptureMs = response.headers.get("X-D810-Capture-Ms") || "";
+        const serverWriteMs = response.headers.get("X-D810-Write-Ms") || "";
+        const serverCaptureDoneAt = response.headers.get("X-D810-Capture-Done-At-Ms") || "";
+        const responseContentType = response.headers.get("content-type") || "";
+        const blob = await response.blob();
+        if (seq !== currentFrameSeq) {
+          return;
+        }
+        const isRealJpeg = responseContentType.toLowerCase().startsWith("image/jpeg");
+        liveFrame.dataset.requestStartedAt = String(requestedAt);
+        liveFrame.dataset.fetchDoneAt = String(fetchDoneAt);
+        liveFrame.dataset.renderStartedAt = String(performance.now());
+        liveFrame.dataset.serverPrepMs = serverPrepMs;
+        liveFrame.dataset.captureDoneAt = serverCaptureDoneAt;
+        liveFrame.dataset.serverTotalMs = serverTotalMs;
+        liveFrame.dataset.serverCaptureMs = serverCaptureMs;
+        liveFrame.dataset.serverWriteMs = serverWriteMs;
+        liveFrame.dataset.responseContentType = responseContentType;
+        liveFrame.dataset.responseBytes = String(blob.size || "");
+        liveFrame.dataset.transportKind = "snapshot";
+        frameType.textContent = responseContentType || "--";
+        if (!isRealJpeg) {
+          liveFrame.classList.remove("updating");
+          statusConn.textContent = "Live preview pending";
+          perfState.textContent = `srv prep ${serverPrepMs} cap ${serverCaptureMs} write ${serverWriteMs} total ${serverTotalMs}ms pending`;
+          updatePerfBreakdown({
+            d810Ms: toNumber(serverCaptureMs),
+            ddserverMs: toNumber(serverPrepMs),
+            bridgeMs: toNumber(serverWriteMs),
+            uiMs: null,
+            uiHint: "pending",
+            captureBytes: blob.size || null,
+          });
+          stampTime();
+          if (liveMode) {
+            scheduleLiveFrame(LIVE_PENDING_DELAY_MS);
+          }
+          return;
+        }
+        statusConn.textContent = "D810 detected";
+        enqueueFrameRender(blob, {
+          prepMs: serverPrepMs,
+          captureMs: serverCaptureMs,
+          writeMs: serverWriteMs,
+          totalMs: serverTotalMs,
+          captureDoneAt: serverCaptureDoneAt,
+        }, {
+          requestStartedAt: requestedAt,
+          fetchDoneAt,
+          contentType: responseContentType,
+          bytes: blob.size || 0,
+          transportKind: "snapshot",
+        });
+        if (liveMode) {
+          scheduleLiveFrame(LIVE_FRAME_DELAY_MS);
+        }
+      } catch (error) {
+        liveFrame.classList.remove("updating");
+        perfState.textContent = "err";
+        updatePerfBreakdown();
+        actionState.textContent = "frame failed";
+        lastAction.textContent = String(error.message || error);
+        stampTime();
+        if (liveMode) {
+          scheduleLiveFrame(LIVE_RETRY_DELAY_MS);
+        }
+      }
+    }
+
+    async function runAction(rawAction) {
+      const action = actionAliases[rawAction] || rawAction;
+      const wasLive = liveMode;
+      const pausedLive = false;
+      const uiAt = Date.now();
+      if (action === "refresh") {
+        await refreshFrame();
+        return;
+      }
+      if (action === "status") {
+        await refreshStatus();
+        lastAction.textContent = "status refreshed";
+        return;
+      }
+
+      if (pausedLive) {
+        stopLiveLoop();
+      }
+
+      actionState.textContent = `${action}...`;
+      syncUiMood();
+      try {
+        const payload = await fetchJson(`${API.action}?action=${encodeURIComponent(action)}`, {
+          headers: {
+            "X-D810-Event": "action",
+            "X-D810-Action": action,
+          },
+          uiAt,
+          uiStage: "action-request",
+          uiAction: action,
+        });
+        if (!payload.ok && payload.status === "camera_busy") {
+          actionState.textContent = "camera busy";
+          lastAction.textContent = `${action}: camera_busy`;
+          return;
+        }
+        actionState.textContent = payload.status || `${action} sent`;
+        lastAction.textContent = `${payload.action || action}: ${payload.status || "unknown"}`;
+        if (payload.status === "camera_missing") {
+          statusConn.textContent = "Camera missing";
+        }
+        if (payload.status === "liveview_on") {
+          await startLiveLoop({ ensure: false });
+        }
+        if (payload.status === "liveview_off") {
+          stopLiveLoop();
+        } else if (pausedLive) {
+          await startLiveLoop({ ensure: false });
+        }
+        if (payload.status === "unknown") {
+          throw new Error(`unknown action: ${action}`);
+        }
+      } catch (error) {
+        setError(`${action} failed: ${String(error.message || error)}`);
+      }
+
+      afState.textContent = action === "af" ? "triggered" : "ready";
+      expState.textContent = isLandscape() ? "live mode" : "auto";
+      syncUiMood();
+    }
+
+    document.querySelectorAll("[data-action]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const uiAt = Date.now();
+        await fetchJson(`${API.action}?action=trace&target=${encodeURIComponent(button.dataset.action)}&stage=click`, {
+          uiAt,
+          uiStage: "click",
+          uiAction: button.dataset.action,
+        }).catch(() => null);
+        await runAction(button.dataset.action);
+      });
+    });
+
+    window.addEventListener("error", (event) => setError(event.message || "UI runtime error"));
+    window.addEventListener("unhandledrejection", (event) => setError(String(event.reason?.message || event.reason || "UI promise rejected")));
+    window.addEventListener("resize", setModeLabel, { passive: true });
+    window.addEventListener("orientationchange", setModeLabel, { passive: true });
+
+    setModeLabel();
+    clearVolatileInspectionState();
+    drawPlaceholder();
+    resetFpsDisplays();
+    setError("새로고침 감지, 새 세션을 다시 시작합니다");
+    syncUiMood();
+    (async () => {
+      if (isReloadNavigation()) {
+        await fetchJson("/cgi-bin/action?action=reset").catch(() => null);
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+      await fetchJson(`/cgi-bin/session-manager?boot=${BOOT_TOKEN}`).catch(() => null);
+      await refreshStatus();
+      stampTime();
+    })();
+  </script>
+</body>
+</html>

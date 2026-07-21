@@ -1,0 +1,14 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+SCRIPT_DIR=$(dirname "$0")
+. "$SCRIPT_DIR/bridge-common.sh"
+
+STACK_GUARDIAN_PIDFILE=${D810D_STACK_GUARDIAN_PIDFILE:-/tmp/d810-stack-guardian.pid}
+INTERVAL=${D810D_STACK_GUARDIAN_INTERVAL:-3}
+
+printf '%s\n' "$$" > "$STACK_GUARDIAN_PIDFILE"
+trap 'rm -f "$STACK_GUARDIAN_PIDFILE"' EXIT INT TERM
+
+if ! ws_alive; then
+  ws_start >/dev/null 2>&1 || true
+fi

@@ -1,0 +1,23 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+SCRIPT_DIR=$(dirname "$0")
+case "$SCRIPT_DIR" in
+  /*) ;;
+  *) SCRIPT_DIR=/www/cgi-bin ;;
+esac
+. "$SCRIPT_DIR/variant-v21-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+
+if ! bridge_start; then
+  printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+  printf '{"ok":false,"status":"bridge_unavailable","cameraDetected":false,"liveView":false}\n'
+  exit 0
+fi
+
+OUT=$(bridge_request AUTODETECT)
+if [ -z "$OUT" ]; then
+  OUT='{"ok":false,"status":"bridge_unavailable","cameraDetected":false,"liveView":false}'
+fi
+
+printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+printf '%s\n' "$OUT"

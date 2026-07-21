@@ -1,0 +1,73 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+
+SCRIPT_DIR=$(dirname "$0")
+case "$SCRIPT_DIR" in
+  /*) ;;
+  *) SCRIPT_DIR=/www/cgi-bin ;;
+esac
+. "$SCRIPT_DIR/variant-v21-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+
+liveview_trace_log() {
+  if [ -n "$BRIDGE_LOG" ]; then
+    printf '[liveview][%s] %s\n' "$(now_ms)" "$1" >> "$BRIDGE_LOG"
+  fi
+}
+
+FRAME=${D810D_FRAME_PATH:-/tmp/d810-live-v21.jpg}
+LAST_GOOD=${D810D_FRAME_LAST_GOOD:-/tmp/d810-live-v21-last-good.jpg}
+META=${D810D_FRAME_META:-/tmp/d810-live-v21.meta}
+
+is_jpeg_file() {
+  file=$1
+  [ -n "$file" ] || return 1
+  [ -r "$file" ] || return 1
+  [ -s "$file" ] || return 1
+  return 0
+}
+
+pick_frame() {
+  if is_jpeg_file "$FRAME"; then
+    printf '%s' "$FRAME"
+    return 0
+  fi
+  if is_jpeg_file "$LAST_GOOD"; then
+    printf '%s' "$LAST_GOOD"
+    return 0
+  fi
+  return 1
+}
+
+bridge_start >/dev/null 2>&1 || true
+liveview_trace_log "request received boot=${BOOT_TOKEN:-}"
+liveview_trace_log "headers trace=${HTTP_X_D810_TRACE:-} event=${HTTP_X_D810_EVENT:-} client=${HTTP_X_D810_CLIENT:-} ui_at=${HTTP_X_D810_UI_AT:-} ui_stage=${HTTP_X_D810_UI_STAGE:-} ui_action=${HTTP_X_D810_UI_ACTION:-}"
+
+SERVE_FRAME=$(pick_frame)
+if [ -n "$SERVE_FRAME" ]; then
+  if [ -r "$META" ]; then
+    . "$META"
+  fi
+  liveview_trace_log "serving frame=${SERVE_FRAME}"
+  printf 'Content-Type: image/jpeg\r\nCache-Control: no-store, no-cache, must-revalidate\r\nPragma: no-cache\r\nExpires: 0\r\n'
+  [ -n "$startedAt" ] && printf 'X-D810-Started-At-Ms: %s\r\n' "$startedAt"
+  [ -n "$prepMs" ] && printf 'X-D810-Prep-Ms: %s\r\n' "$prepMs"
+  [ -n "$captureStartedAt" ] && printf 'X-D810-Capture-Started-At-Ms: %s\r\n' "$captureStartedAt"
+  [ -n "$captureDoneAt" ] && printf 'X-D810-Capture-Done-At-Ms: %s\r\n' "$captureDoneAt"
+  [ -n "$writeDoneAt" ] && printf 'X-D810-Write-Done-At-Ms: %s\r\n' "$writeDoneAt"
+  [ -n "$totalMs" ] && printf 'X-D810-Total-Ms: %s\r\n' "$totalMs"
+  [ -n "$captureMs" ] && printf 'X-D810-Capture-Ms: %s\r\n' "$captureMs"
+  [ -n "$writeMs" ] && printf 'X-D810-Write-Ms: %s\r\n' "$writeMs"
+  [ -n "$bytes" ] && printf 'X-D810-Frame-Bytes: %s\r\n' "$bytes"
+  printf 'X-D810-Frame-Source: cache\r\n\r\n'
+  cat "$SERVE_FRAME"
+  exit 0
+fi
+
+liveview_trace_log "frame unavailable"
+printf 'Status: 503 Service Unavailable\r\n'
+printf 'Content-Type: text/plain\r\n'
+printf 'Cache-Control: no-store, no-cache, must-revalidate\r\n'
+printf 'Pragma: no-cache\r\n'
+printf 'Expires: 0\r\n\r\n'
+printf 'liveview pending\n'

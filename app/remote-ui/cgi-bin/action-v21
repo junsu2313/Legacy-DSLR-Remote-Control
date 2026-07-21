@@ -1,0 +1,129 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+ACTION=${QUERY_STRING#action=}
+ACTION=${ACTION%%&*}
+SCRIPT_DIR=$(dirname "$0")
+case "$SCRIPT_DIR" in
+  /*) ;;
+  *) SCRIPT_DIR=/www/cgi-bin ;;
+esac
+. "$SCRIPT_DIR/variant-v21-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+
+action_trace_log() {
+  printf '[action-v21][%s] %s\n' "$(now_ms)" "$1" >> "$BRIDGE_LOG"
+}
+
+OUT=""
+STATUS=""
+NEEDS_BRIDGE=0
+
+action_trace_log "received query=${QUERY_STRING:-}"
+action_trace_log "headers trace=${HTTP_X_D810_TRACE:-} event=${HTTP_X_D810_EVENT:-} client=${HTTP_X_D810_CLIENT:-} ui_at=${HTTP_X_D810_UI_AT:-} ui_stage=${HTTP_X_D810_UI_STAGE:-} ui_action=${HTTP_X_D810_UI_ACTION:-}"
+
+case "$ACTION" in
+  trace)
+    STATUS=logged
+    ;;
+  live-on|live-off|live-fallback|mute|status|shutter|raw|unlock|af|recover|reset)
+    NEEDS_BRIDGE=1
+    ;;
+  *)
+    STATUS=unknown
+    ;;
+esac
+
+if [ "$NEEDS_BRIDGE" -eq 1 ] && ! bridge_start; then
+  action_trace_log "bridge unavailable action=${ACTION}"
+  printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+  printf '{"ok":false,"action":"%s","status":"bridge_unavailable"}\n' "$ACTION"
+  exit 0
+fi
+
+case "$ACTION" in
+  trace)
+    action_trace_log "trace event query=${QUERY_STRING:-}"
+    OUT='{"ok":true,"action":"trace","status":"logged"}'
+    ;;
+  live-on)
+    # The persistent bridge is the only live-frame producer.  A stale fallback
+    # worker would make the bridge suppress its own capture loop.
+    /bin/sh "$SCRIPT_DIR/frame-refresh-v21" stop >/dev/null 2>&1 || true
+    action_trace_log "forwarding LIVE_START"
+    OUT=$(bridge_request LIVE_START)
+    action_trace_log "bridge response action=live-on ${OUT%%$'\n'*}"
+    case "$OUT" in
+      *'"ok":true'*)
+        printf '%s\n' "$ACTION" > "$SESSION_LIVE_REQUEST"
+        ;;
+    esac
+    ;;
+  live-off|mute)
+    action_trace_log "forwarding LIVE_STOP"
+    rm -f "$SESSION_LIVE_REQUEST" "$SESSION_REPAIR_REQUEST"
+    /bin/sh "$SCRIPT_DIR/frame-refresh-v21" stop >/dev/null 2>&1 || true
+    OUT=$(bridge_request LIVE_STOP)
+    action_trace_log "bridge response action=$ACTION ${OUT%%$'\n'*}"
+    ;;
+  live-fallback)
+    # HTTP fallback consumes the bridge-owned cache; it must never create a
+    # second PTP capture worker or request a session repair.
+    /bin/sh "$SCRIPT_DIR/frame-refresh-v21" stop >/dev/null 2>&1 || true
+    action_trace_log "fallback consumer enabled; bridge remains sole producer"
+    OUT='{"ok":true,"status":"live_fallback_ready","liveView":true}'
+    ;;
+  status)
+    action_trace_log "forwarding STATUS"
+    OUT=$(bridge_request STATUS)
+    action_trace_log "bridge response action=status ${OUT%%$'\n'*}"
+    ;;
+  shutter)
+    action_trace_log "forwarding SHUTTER"
+    OUT=$(bridge_request SHUTTER)
+    action_trace_log "bridge response action=shutter ${OUT%%$'\n'*}"
+    ;;
+  raw)
+    action_trace_log "forwarding RAW_MODE"
+    OUT=$(bridge_request RAW_MODE)
+    action_trace_log "bridge response action=raw ${OUT%%$'\n'*}"
+    ;;
+  unlock)
+    action_trace_log "forwarding UNLOCK"
+    OUT=$(bridge_request UNLOCK)
+    action_trace_log "bridge response action=unlock ${OUT%%$'\n'*}"
+    ;;
+  af)
+    action_trace_log "forwarding AF"
+    OUT=$(bridge_request AF)
+    action_trace_log "bridge response action=af ${OUT%%$'\n'*}"
+    ;;
+  recover)
+    action_trace_log "forwarding RECOVER"
+    OUT=$(bridge_request RECOVER)
+    action_trace_log "bridge response action=recover ${OUT%%$'\n'*}"
+    if [ -f "$SESSION_LIVE_REQUEST" ] || [ -f "${D810D_LIVE_SESSION_PATH:-/tmp/d810-live-v21.session}" ]; then
+      action_trace_log "restoring live session after recovery"
+      LIVE_OUT=$(bridge_request LIVE_START)
+      case "$LIVE_OUT" in
+        *'"ok":true'*) OUT="$LIVE_OUT" ;;
+      esac
+      action_trace_log "live restore response ${LIVE_OUT%%$'\n'*}"
+    fi
+    ;;
+  reset)
+    action_trace_log "forwarding RESET"
+    rm -f "$SESSION_LIVE_REQUEST" "$SESSION_REPAIR_REQUEST"
+    bridge_restart_stack
+    OUT='{"ok":true,"action":"reset","status":"restarting"}'
+    action_trace_log "bridge response action=reset ${OUT%%$'\n'*}"
+    ;;
+esac
+
+printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+if [ -n "$OUT" ]; then
+  printf '%s\n' "$OUT"
+elif [ "$STATUS" = "unknown" ]; then
+  printf '{"ok":false,"action":"%s","status":"unknown"}\n' "$ACTION"
+else
+  printf '{"ok":false,"action":"%s","status":"bridge_unavailable"}\n' "$ACTION"
+fi

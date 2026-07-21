@@ -1,0 +1,1057 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <title>D810 Remote App</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg0: #081018;
+      --bg1: #0d1724;
+      --panel: rgba(9, 16, 24, 0.84);
+      --line: rgba(255, 255, 255, 0.08);
+      --text: #edf4ff;
+      --muted: #9fb0c7;
+      --accent: #71e3c7;
+      --gold: #f5d783;
+      --danger: #ff8479;
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.34);
+      --radius: 24px;
+      --preview-h: 40vh;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(113, 227, 199, 0.14), transparent 30%),
+        radial-gradient(circle at top right, rgba(245, 215, 131, 0.14), transparent 28%),
+        linear-gradient(180deg, var(--bg1), var(--bg0));
+      color: var(--text);
+      font: 500 16px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .topbar,
+    .preview-card,
+    .control-card,
+    .footer-bar {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+    }
+
+    .topbar {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand {
+      display: grid;
+      gap: 3px;
+    }
+
+    .kicker {
+      color: var(--gold);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .title {
+      font-size: 22px;
+      font-weight: 780;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 13px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.04);
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(113, 227, 199, 0.16);
+    }
+
+    .status-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .preview-card {
+      position: relative;
+      overflow: hidden;
+      min-height: clamp(240px, var(--preview-h), 43vh);
+    }
+
+    .preview-frame {
+      width: 100%;
+      height: clamp(240px, var(--preview-h), 43vh);
+      display: block;
+      background: linear-gradient(135deg, #101927, #071019 42%, #1a2534);
+    }
+
+    .preview-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 14px;
+      pointer-events: none;
+    }
+
+    .preview-top,
+    .preview-bottom {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      background: rgba(7, 11, 18, 0.68);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(12px);
+      font-size: 12px;
+    }
+
+    .chip strong {
+      font-size: 13px;
+    }
+
+    .control-card {
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-title {
+      display: grid;
+      gap: 2px;
+    }
+
+    .toolbar-title strong {
+      font-size: 16px;
+    }
+
+    .toolbar-title span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .small-btn {
+      min-height: 42px;
+      padding: 0 14px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      font-weight: 700;
+      touch-action: manipulation;
+    }
+
+    .small-btn.primary {
+      background: linear-gradient(180deg, #7ce9d0, #38c2a2);
+      color: #062117;
+    }
+
+    .small-btn.warn {
+      background: linear-gradient(180deg, #f5d783, #d9aa3f);
+      color: #151106;
+    }
+
+    .control-stage {
+      position: relative;
+      min-height: clamp(320px, 46vh, 56vh);
+      border-radius: 22px;
+      border: 1px dashed rgba(255, 255, 255, 0.08);
+      background:
+        radial-gradient(circle at center, rgba(255, 255, 255, 0.03), transparent 48%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+      overflow: hidden;
+    }
+
+    .control-stage.editing {
+      border-style: solid;
+      border-color: rgba(113, 227, 199, 0.28);
+      box-shadow: inset 0 0 0 1px rgba(113, 227, 199, 0.12);
+    }
+
+    .button-ring {
+      position: absolute;
+      inset: 10% 8%;
+      border-radius: 50%;
+      border: 1px dashed rgba(255, 255, 255, 0.05);
+      pointer-events: none;
+    }
+
+    .control-node {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: var(--size, 92px);
+      height: var(--size, 92px);
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 10px;
+      touch-action: none;
+    }
+
+    .control-node strong {
+      display: block;
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .control-node span {
+      display: block;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.74);
+      margin-top: 2px;
+    }
+
+    .control-node.primary {
+      background: radial-gradient(circle at 30% 25%, rgba(255, 240, 201, 0.24), transparent 34%), linear-gradient(180deg, #f5d783, #d9aa3f);
+      color: #171208;
+      border-color: rgba(255, 225, 148, 0.44);
+    }
+
+    .control-node.primary span {
+      color: rgba(23, 18, 8, 0.74);
+    }
+
+    .control-node.accent {
+      background: radial-gradient(circle at 30% 25%, rgba(221, 255, 247, 0.18), transparent 34%), linear-gradient(180deg, #7ce9d0, #38c2a2);
+      color: #062117;
+      border-color: rgba(124, 233, 208, 0.5);
+    }
+
+    .control-node.accent span {
+      color: rgba(6, 33, 23, 0.74);
+    }
+
+    .control-node.danger {
+      background: radial-gradient(circle at 30% 25%, rgba(255, 221, 221, 0.18), transparent 34%), linear-gradient(180deg, #ff8f87, #c14438);
+      color: #fff7f5;
+      border-color: rgba(255, 143, 135, 0.44);
+    }
+
+    .control-node.dragging {
+      box-shadow: 0 20px 42px rgba(0, 0, 0, 0.4);
+      filter: saturate(1.08);
+      z-index: 20;
+    }
+
+    .control-node.editing {
+      outline: 2px solid rgba(113, 227, 199, 0.4);
+      outline-offset: 4px;
+    }
+
+    .quick-status {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .quick-card {
+      min-height: 68px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      padding: 10px 12px;
+      display: grid;
+      align-content: center;
+      gap: 4px;
+    }
+
+    .quick-card label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .quick-card strong {
+      font-size: 15px;
+    }
+
+    .footer-bar {
+      padding: 12px 14px;
+      color: var(--muted);
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    @media (orientation: landscape) {
+      :root { --preview-h: 34vh; }
+      .app {
+        grid-template-columns: minmax(0, 0.92fr) minmax(320px, 0.88fr);
+        grid-template-rows: auto auto 1fr;
+        grid-template-areas:
+          "top top"
+          "preview controls"
+          "footer footer";
+      }
+      .topbar { grid-area: top; }
+      .preview-card { grid-area: preview; }
+      .control-card { grid-area: controls; }
+      .footer-bar { grid-area: footer; }
+      .control-stage { min-height: 60vh; }
+    }
+
+    @media (max-width: 520px) {
+      .app { padding: 10px; }
+      .title { font-size: 20px; }
+      .quick-status { grid-template-columns: 1fr; }
+      .control-node {
+        width: var(--size-mobile, var(--size, 88px));
+        height: var(--size-mobile, var(--size, 88px));
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="title-row">
+        <div class="brand">
+          <div class="kicker">20260628-1</div>
+          <div class="title">D810 Field Remote</div>
+          <div class="subtitle">Simple, immediate, portrait-first</div>
+        </div>
+        <div class="live-badge"><span class="dot"></span><span id="connState">Checking...</span></div>
+      </div>
+      <div class="status-line">
+        <span id="heroState">Ready for quick shooting</span>
+        <span id="lastAction">Last action: none</span>
+      </div>
+    </header>
+
+    <section class="preview-card">
+      <canvas id="liveFrame" class="preview-frame" width="1600" height="1067" aria-label="Live view"></canvas>
+      <div class="preview-overlay">
+        <div class="preview-top">
+          <div class="chip">Preview <strong id="previewMode">idle</strong></div>
+          <div class="chip">Updated <strong id="lastUpdate">--:--:--</strong></div>
+        </div>
+        <div class="preview-bottom">
+          <div class="chip">Connection <strong id="statusConn">checking</strong></div>
+          <div class="chip">Camera <strong id="cameraState">ready</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="control-card">
+      <div class="toolbar">
+        <div class="toolbar-title">
+          <strong>Button Layout</strong>
+          <span>Switch to edit mode, drag the circles, then save</span>
+        </div>
+        <div class="toolbar-actions">
+          <button id="toggleEdit" class="small-btn">Edit Layout</button>
+          <button id="saveLayout" class="small-btn primary" hidden>Save</button>
+          <button id="resetLayout" class="small-btn warn" hidden>Reset</button>
+        </div>
+      </div>
+
+      <div id="controlStage" class="control-stage">
+        <div class="button-ring"></div>
+        <button class="control-node accent" data-id="af" data-action="af" style="--size:90px;--size-mobile:84px;"><div><strong>AF</strong><span>focus</span></div></button>
+        <button class="control-node primary" data-id="shutter" data-action="shutter" style="--size:118px;--size-mobile:108px;"><div><strong>SHOT</strong><span>capture</span></div></button>
+        <button class="control-node" data-id="refresh" data-action="refresh" style="--size:88px;--size-mobile:82px;"><div><strong>FRAME</strong><span>update</span></div></button>
+        <button class="control-node accent" data-id="liveOn" data-action="live-on" style="--size:88px;--size-mobile:82px;"><div><strong>LIVE</strong><span>start</span></div></button>
+        <button class="control-node danger" data-id="liveOff" data-action="live-off" style="--size:88px;--size-mobile:82px;"><div><strong>STOP</strong><span>live</span></div></button>
+        <button class="control-node" data-id="status" data-action="status" style="--size:82px;--size-mobile:78px;"><div><strong>INFO</strong><span>check</span></div></button>
+      </div>
+
+      <div class="quick-status">
+        <div class="quick-card"><label>Preview Mode</label><strong id="previewState">manual</strong></div>
+        <div class="quick-card"><label>Live Source</label><strong id="statusSource">bridge /cgi-bin/liveview</strong></div>
+        <div class="quick-card"><label>Frame Type</label><strong id="frameType">--</strong></div>
+      </div>
+    </section>
+
+    <footer class="footer-bar">
+      <span>Use <code>/cc</code> for the user app and keep debug tools in <code>20260628-2</code>.</span>
+      <span id="layoutNotice">Layout mode off</span>
+    </footer>
+  </div>
+
+  <script>
+    const liveFrame = document.getElementById("liveFrame");
+    const liveFrameCtx = liveFrame.getContext("2d", { alpha: false, desynchronized: true });
+    const connState = document.getElementById("connState");
+    const heroState = document.getElementById("heroState");
+    const lastAction = document.getElementById("lastAction");
+    const lastUpdate = document.getElementById("lastUpdate");
+    const previewMode = document.getElementById("previewMode");
+    const previewState = document.getElementById("previewState");
+    const statusConn = document.getElementById("statusConn");
+    const cameraState = document.getElementById("cameraState");
+    const statusSource = document.getElementById("statusSource");
+    const frameType = document.getElementById("frameType");
+    const layoutNotice = document.getElementById("layoutNotice");
+    const toggleEdit = document.getElementById("toggleEdit");
+    const saveLayout = document.getElementById("saveLayout");
+    const resetLayout = document.getElementById("resetLayout");
+    const controlStage = document.getElementById("controlStage");
+    const controlNodes = Array.from(document.querySelectorAll(".control-node"));
+
+    const API = {
+      status: "/cgi-bin/status",
+      liveview: "/cgi-bin/liveview",
+      action: "/cgi-bin/action",
+    };
+
+    const LAYOUT_STORAGE_KEY = "d810-cc-layout-v1";
+    const DEFAULT_LAYOUT = {
+      af: { x: 22, y: 38 },
+      shutter: { x: 50, y: 72 },
+      refresh: { x: 81, y: 60 },
+      liveOn: { x: 76, y: 28 },
+      liveOff: { x: 20, y: 74 },
+      status: { x: 49, y: 23 },
+    };
+
+    const actionMessages = {
+      af: "Auto focus triggered",
+      shutter: "Shutter fired",
+      refresh: "Preview refreshed",
+      "live-on": "Live preview started",
+      "live-off": "Live preview stopped",
+      status: "Camera status updated",
+    };
+
+    let liveMode = false;
+    let liveSocket = null;
+    let liveSocketMeta = null;
+    let liveSocketReconnectTimer = 0;
+    let pendingFramePacket = null;
+    let latestEnqueuedSeq = 0;
+    let liveRenderBusy = false;
+    let currentFrameSeq = 0;
+    let editMode = false;
+    let dragState = null;
+
+    const LIVE_PENDING_DELAY_MS = 400;
+    const LIVE_RETRY_DELAY_MS = 400;
+    const LIVE_WS_CONNECT_TIMEOUT_MS = 2500;
+    const LIVE_WS_RECONNECT_DELAY_MS = 700;
+    const LIVE_WS_PORT = 8091;
+    const PLACEHOLDER_W = 1600;
+    const PLACEHOLDER_H = 1067;
+
+    function stampTime() {
+      lastUpdate.textContent = new Date().toLocaleTimeString("ko-KR", { hour12: false });
+    }
+
+    function shellStatus(text, detail) {
+      connState.textContent = text;
+      heroState.textContent = detail;
+    }
+
+    function setAction(text) {
+      lastAction.textContent = `Last action: ${text}`;
+      stampTime();
+    }
+
+    function drawPlaceholder() {
+      if (liveFrame.width !== PLACEHOLDER_W || liveFrame.height !== PLACEHOLDER_H) {
+        liveFrame.width = PLACEHOLDER_W;
+        liveFrame.height = PLACEHOLDER_H;
+      }
+      const gradient = liveFrameCtx.createLinearGradient(0, 0, PLACEHOLDER_W, PLACEHOLDER_H);
+      gradient.addColorStop(0, "#101927");
+      gradient.addColorStop(0.5, "#071019");
+      gradient.addColorStop(1, "#202b3b");
+      liveFrameCtx.fillStyle = gradient;
+      liveFrameCtx.fillRect(0, 0, PLACEHOLDER_W, PLACEHOLDER_H);
+      liveFrameCtx.fillStyle = "rgba(113,227,199,0.08)";
+      liveFrameCtx.beginPath();
+      liveFrameCtx.arc(310, 850, 240, 0, Math.PI * 2);
+      liveFrameCtx.fill();
+      liveFrameCtx.fillStyle = "rgba(245,215,131,0.10)";
+      liveFrameCtx.beginPath();
+      liveFrameCtx.arc(1280, 180, 160, 0, Math.PI * 2);
+      liveFrameCtx.fill();
+      liveFrameCtx.strokeStyle = "rgba(255,255,255,0.12)";
+      liveFrameCtx.lineWidth = 4;
+      liveFrameCtx.strokeRect(82, 302, 1436, 572);
+      liveFrameCtx.fillStyle = "rgba(237,244,255,0.86)";
+      liveFrameCtx.font = "54px Arial, sans-serif";
+      liveFrameCtx.fillText("Field Preview Ready", 94, 164);
+      liveFrameCtx.fillStyle = "rgba(159,176,199,0.88)";
+      liveFrameCtx.font = "28px Arial, sans-serif";
+      liveFrameCtx.fillText("Use LIVE or FRAME for a quick status preview", 94, 220);
+    }
+
+    function fitCanvas(bitmapWidth, bitmapHeight) {
+      if (!bitmapWidth || !bitmapHeight) {
+        return;
+      }
+      if (liveFrame.width !== bitmapWidth || liveFrame.height !== bitmapHeight) {
+        liveFrame.width = bitmapWidth;
+        liveFrame.height = bitmapHeight;
+      }
+    }
+
+    function drawBitmapCover(bitmap) {
+      const canvasWidth = liveFrame.width;
+      const canvasHeight = liveFrame.height;
+      const scale = Math.max(canvasWidth / bitmap.width, canvasHeight / bitmap.height);
+      const drawWidth = bitmap.width * scale;
+      const drawHeight = bitmap.height * scale;
+      const dx = (canvasWidth - drawWidth) / 2;
+      const dy = (canvasHeight - drawHeight) / 2;
+      liveFrameCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+      liveFrameCtx.drawImage(bitmap, dx, dy, drawWidth, drawHeight);
+    }
+
+    function websocketUrl() {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      return `${proto}://${location.hostname}:${LIVE_WS_PORT}/live`;
+    }
+
+    function loadLayout() {
+      try {
+        const raw = localStorage.getItem(LAYOUT_STORAGE_KEY);
+        return raw ? { ...DEFAULT_LAYOUT, ...JSON.parse(raw) } : { ...DEFAULT_LAYOUT };
+      } catch (_) {
+        return { ...DEFAULT_LAYOUT };
+      }
+    }
+
+    function persistLayout(layout) {
+      localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layout));
+    }
+
+    function currentLayout() {
+      const layout = {};
+      for (const node of controlNodes) {
+        layout[node.dataset.id] = { x: Number(node.dataset.x || 50), y: Number(node.dataset.y || 50) };
+      }
+      return layout;
+    }
+
+    function applyLayout(layout) {
+      for (const node of controlNodes) {
+        const point = layout[node.dataset.id] || DEFAULT_LAYOUT[node.dataset.id] || { x: 50, y: 50 };
+        const x = Math.max(8, Math.min(92, Number(point.x) || 50));
+        const y = Math.max(10, Math.min(90, Number(point.y) || 50));
+        node.dataset.x = String(x);
+        node.dataset.y = String(y);
+        node.style.left = `${x}%`;
+        node.style.top = `${y}%`;
+      }
+    }
+
+    function setEditMode(next) {
+      editMode = !!next;
+      controlStage.classList.toggle("editing", editMode);
+      for (const node of controlNodes) {
+        node.classList.toggle("editing", editMode);
+      }
+      toggleEdit.textContent = editMode ? "Done Editing" : "Edit Layout";
+      saveLayout.hidden = !editMode;
+      resetLayout.hidden = !editMode;
+      layoutNotice.textContent = editMode ? "Drag buttons, then save" : "Layout mode off";
+    }
+
+    function updateNodePosition(node, clientX, clientY) {
+      const rect = controlStage.getBoundingClientRect();
+      const x = ((clientX - rect.left) / rect.width) * 100;
+      const y = ((clientY - rect.top) / rect.height) * 100;
+      const clampedX = Math.max(8, Math.min(92, x));
+      const clampedY = Math.max(10, Math.min(90, y));
+      node.dataset.x = String(clampedX);
+      node.dataset.y = String(clampedY);
+      node.style.left = `${clampedX}%`;
+      node.style.top = `${clampedY}%`;
+    }
+
+    function beginDrag(event) {
+      if (!editMode) {
+        return;
+      }
+      const node = event.currentTarget;
+      dragState = { node };
+      node.classList.add("dragging");
+      node.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    }
+
+    function moveDrag(event) {
+      if (!dragState || event.currentTarget !== dragState.node) {
+        return;
+      }
+      updateNodePosition(dragState.node, event.clientX, event.clientY);
+    }
+
+    function endDrag(event) {
+      if (!dragState || event.currentTarget !== dragState.node) {
+        return;
+      }
+      dragState.node.classList.remove("dragging");
+      try {
+        dragState.node.releasePointerCapture(event.pointerId);
+      } catch (_) {}
+      dragState = null;
+    }
+
+    async function fetchJson(url, options = {}) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      try {
+        const response = await fetch(url, { cache: "no-store", ...options, signal: controller.signal });
+        const raw = await response.text();
+        const data = JSON.parse(raw);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return data;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    async function renderFramePacket(packet) {
+      const bitmap = await createImageBitmap(packet.blob);
+      if (packet.seq !== latestEnqueuedSeq) {
+        bitmap.close();
+        return;
+      }
+      fitCanvas(bitmap.width, bitmap.height);
+      drawBitmapCover(bitmap);
+      bitmap.close();
+      frameType.textContent = packet.contentType ? `${packet.contentType}${packet.bytes ? ` (${packet.bytes}B)` : ""}` : "--";
+      previewMode.textContent = packet.transportKind === "websocket" ? "live" : "manual";
+      previewState.textContent = packet.transportKind === "websocket" ? "live" : "manual";
+      statusConn.textContent = "D810 detected";
+      cameraState.textContent = liveMode ? "live view on" : "ready";
+      stampTime();
+    }
+
+    function schedulePendingFrameRender() {
+      if (liveRenderBusy || !pendingFramePacket) {
+        return;
+      }
+      const packet = pendingFramePacket;
+      pendingFramePacket = null;
+      liveRenderBusy = true;
+      requestAnimationFrame(async () => {
+        try {
+          await renderFramePacket(packet);
+        } catch (error) {
+          shellStatus("Preview error", "Could not draw frame");
+          setAction(String(error.message || error));
+        } finally {
+          liveRenderBusy = false;
+          if (pendingFramePacket) {
+            schedulePendingFrameRender();
+          }
+        }
+      });
+    }
+
+    function enqueueFrameRender(blob, meta = {}, options = {}) {
+      pendingFramePacket = {
+        seq: ++latestEnqueuedSeq,
+        blob,
+        meta,
+        contentType: options.contentType || "image/jpeg",
+        bytes: options.bytes ?? blob.size ?? 0,
+        transportKind: options.transportKind || "snapshot",
+      };
+      schedulePendingFrameRender();
+    }
+
+    function clearLiveSocketReconnect() {
+      if (liveSocketReconnectTimer) {
+        clearTimeout(liveSocketReconnectTimer);
+        liveSocketReconnectTimer = 0;
+      }
+    }
+
+    function closeLiveSocket() {
+      clearLiveSocketReconnect();
+      liveSocketMeta = null;
+      if (!liveSocket) {
+        return;
+      }
+      const socket = liveSocket;
+      liveSocket = null;
+      try {
+        socket.onopen = null;
+        socket.onmessage = null;
+        socket.onerror = null;
+        socket.onclose = null;
+        socket.close();
+      } catch (_) {}
+    }
+
+    function scheduleLiveSocketReconnect(delayMs = LIVE_WS_RECONNECT_DELAY_MS) {
+      if (!liveMode) {
+        return;
+      }
+      clearLiveSocketReconnect();
+      liveSocketReconnectTimer = setTimeout(async () => {
+        liveSocketReconnectTimer = 0;
+        if (!liveMode || liveSocket) {
+          return;
+        }
+        const connected = await startLiveSocket();
+        if (!connected && liveMode) {
+          await refreshFrame({ live: true });
+        }
+      }, delayMs);
+    }
+
+    function applyStreamFrame(frameBlob, meta = {}) {
+      statusSource.textContent = `bridge ${websocketUrl()}`;
+      statusConn.textContent = "D810 detected";
+      previewMode.textContent = "live";
+      previewState.textContent = "live";
+      enqueueFrameRender(frameBlob, meta, {
+        contentType: "image/jpeg",
+        bytes: frameBlob.size || meta.bytes || 0,
+        transportKind: "websocket",
+      });
+    }
+
+    function startLiveSocket() {
+      closeLiveSocket();
+      statusSource.textContent = `bridge ${websocketUrl()}`;
+      return new Promise((resolve) => {
+        let settled = false;
+        const socket = new WebSocket(websocketUrl());
+        liveSocket = socket;
+        socket.binaryType = "arraybuffer";
+        const finish = (connected) => {
+          if (!settled) {
+            settled = true;
+            resolve(connected);
+          }
+        };
+        const timer = setTimeout(() => {
+          if (liveSocket === socket) {
+            try { socket.close(); } catch (_) {}
+          }
+          finish(false);
+        }, LIVE_WS_CONNECT_TIMEOUT_MS);
+
+        socket.onopen = () => {
+          clearTimeout(timer);
+          if (liveSocket !== socket) {
+            finish(false);
+            return;
+          }
+          shellStatus("Live connected", "Preview is being pushed from the bridge");
+          finish(true);
+        };
+
+        socket.onmessage = (event) => {
+          if (typeof event.data === "string") {
+            try {
+              liveSocketMeta = JSON.parse(event.data);
+            } catch (_) {
+              liveSocketMeta = null;
+            }
+            return;
+          }
+          const meta = liveSocketMeta || {};
+          liveSocketMeta = null;
+          const frameBlob = event.data instanceof Blob ? event.data : new Blob([event.data], { type: "image/jpeg" });
+          applyStreamFrame(frameBlob, meta);
+        };
+
+        socket.onerror = () => {
+          clearTimeout(timer);
+          finish(false);
+        };
+
+        socket.onclose = () => {
+          clearTimeout(timer);
+          if (liveSocket === socket) {
+            liveSocket = null;
+          }
+          finish(false);
+          if (liveMode) {
+            shellStatus("Live reconnecting", "Trying to restore preview");
+            scheduleLiveSocketReconnect();
+          }
+        };
+      });
+    }
+
+    async function refreshFrame(options = {}) {
+      const seq = ++currentFrameSeq;
+      previewState.textContent = options.live ? "live" : "manual";
+      previewMode.textContent = options.live ? "live" : "manual";
+      statusSource.textContent = "bridge /cgi-bin/liveview";
+      try {
+        const response = await fetch(`${API.liveview}?ts=${Date.now()}`, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const responseContentType = response.headers.get("content-type") || "";
+        const captureDoneAt = response.headers.get("X-D810-Capture-Done-At-Ms") || "";
+        const blob = await response.blob();
+        if (seq !== currentFrameSeq) {
+          return;
+        }
+        if (!responseContentType.toLowerCase().startsWith("image/jpeg")) {
+          shellStatus("Preview pending", "The bridge did not return a real JPEG yet");
+          if (liveMode) {
+            setTimeout(() => refreshFrame({ live: true }), LIVE_PENDING_DELAY_MS);
+          }
+          return;
+        }
+        enqueueFrameRender(blob, { captureDoneAt }, {
+          contentType: responseContentType,
+          bytes: blob.size || 0,
+          transportKind: "snapshot",
+        });
+        shellStatus(options.live ? "Live preview" : "Manual preview", options.live ? "Latest frame delivered" : "Fresh frame delivered");
+      } catch (error) {
+        shellStatus("Preview offline", "Could not fetch the frame");
+        setAction(String(error.message || error));
+        if (liveMode) {
+          setTimeout(() => refreshFrame({ live: true }), LIVE_RETRY_DELAY_MS);
+        }
+      }
+    }
+
+    async function refreshStatus() {
+      try {
+        const data = await fetchJson(API.status);
+        if (data.cameraDetected) {
+          statusConn.textContent = "D810 detected";
+          cameraState.textContent = data.liveView ? "live view on" : "ready";
+          connState.textContent = data.liveView ? "Live ready" : "Camera ready";
+          heroState.textContent = data.liveView ? "Preview is active and ready for quick checks" : "Camera connected and waiting";
+          previewState.textContent = data.liveView || liveMode ? "live" : "manual";
+          if (data.liveView && !liveMode) {
+            liveMode = true;
+          }
+        } else {
+          statusConn.textContent = "Camera missing";
+          cameraState.textContent = "missing";
+          shellStatus("Camera missing", "Check the USB link and power");
+        }
+      } catch (error) {
+        shellStatus("Status unavailable", "Could not talk to the camera service");
+        setAction(String(error.message || error));
+      }
+    }
+
+    function stopLiveLoop() {
+      liveMode = false;
+      closeLiveSocket();
+      previewMode.textContent = "idle";
+      previewState.textContent = "manual";
+      cameraState.textContent = "ready";
+      shellStatus("Camera ready", "Live preview stopped");
+    }
+
+    async function ensureLiveviewOn() {
+      const payload = await fetchJson(`${API.action}?action=live-on`);
+      if (!payload.ok && payload.status !== "liveview_on") {
+        throw new Error(payload.status || "liveview_on_failed");
+      }
+      return payload;
+    }
+
+    async function startLiveLoop() {
+      liveMode = true;
+      previewMode.textContent = "live";
+      previewState.textContent = "live";
+      cameraState.textContent = "starting";
+      try {
+        await ensureLiveviewOn();
+        const wsConnected = await startLiveSocket();
+        if (!wsConnected) {
+          await refreshFrame({ live: true });
+        }
+      } catch (error) {
+        stopLiveLoop();
+        setAction(`live start failed: ${String(error.message || error)}`);
+      }
+    }
+
+    async function runAction(action) {
+      if (editMode) {
+        return;
+      }
+      if (action === "refresh") {
+        await refreshFrame();
+        setAction(actionMessages[action]);
+        return;
+      }
+      if (action === "status") {
+        await refreshStatus();
+        setAction(actionMessages[action]);
+        return;
+      }
+      if (action === "live-on") {
+        setAction("Starting live preview");
+        await startLiveLoop();
+        setAction(actionMessages[action]);
+        return;
+      }
+      if (action === "live-off") {
+        try {
+          await fetchJson(`${API.action}?action=live-off`);
+        } catch (_) {}
+        stopLiveLoop();
+        setAction(actionMessages[action]);
+        return;
+      }
+      shellStatus("Sending command", actionMessages[action] || action);
+      try {
+        const payload = await fetchJson(`${API.action}?action=${encodeURIComponent(action)}`);
+        if (!payload.ok && payload.status === "camera_busy") {
+          shellStatus("Camera busy", "Wait a moment and try again");
+          setAction(`${action}: camera_busy`);
+          return;
+        }
+        if (payload.status === "camera_missing") {
+          shellStatus("Camera missing", "Check the USB link and power");
+          return;
+        }
+        if (payload.status === "unknown") {
+          throw new Error(`unknown action: ${action}`);
+        }
+        cameraState.textContent = action === "af" ? "focusing" : action === "shutter" ? "shooting" : "ready";
+        shellStatus("Command sent", actionMessages[action] || action);
+        setAction(`${payload.action || action}: ${payload.status || "ok"}`);
+        setTimeout(() => {
+          cameraState.textContent = liveMode ? "live view on" : "ready";
+        }, 900);
+      } catch (error) {
+        shellStatus("Command failed", "Please try again");
+        setAction(`${action} failed: ${String(error.message || error)}`);
+      }
+    }
+
+    for (const node of controlNodes) {
+      node.addEventListener("pointerdown", beginDrag);
+      node.addEventListener("pointermove", moveDrag);
+      node.addEventListener("pointerup", endDrag);
+      node.addEventListener("pointercancel", endDrag);
+      node.addEventListener("click", async (event) => {
+        if (editMode) {
+          event.preventDefault();
+          return;
+        }
+        await runAction(node.dataset.action);
+      });
+    }
+
+    toggleEdit.addEventListener("click", () => setEditMode(!editMode));
+    saveLayout.addEventListener("click", () => {
+      persistLayout(currentLayout());
+      layoutNotice.textContent = "Layout saved on this device";
+      shellStatus("Layout saved", "Your button map will stay here");
+    });
+    resetLayout.addEventListener("click", () => {
+      applyLayout(DEFAULT_LAYOUT);
+      persistLayout(DEFAULT_LAYOUT);
+      layoutNotice.textContent = "Layout reset to default";
+      shellStatus("Layout reset", "Default button map restored");
+    });
+
+    window.addEventListener("error", (event) => {
+      shellStatus("UI error", "An unexpected error happened");
+      setAction(event.message || "runtime error");
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      shellStatus("UI error", "Promise rejected");
+      setAction(String(event.reason?.message || event.reason || "promise rejected"));
+    });
+
+    applyLayout(loadLayout());
+    drawPlaceholder();
+    stampTime();
+    refreshStatus();
+  </script>
+</body>
+</html>

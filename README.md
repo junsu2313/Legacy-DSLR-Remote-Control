@@ -1,0 +1,121 @@
+# Wireless Nikon D810 Field Camera Platform
+
+An AI-assisted, hardware-backed project that turns a Nikon D810 and a GL.iNet Opal router into a wireless field camera system.
+
+The project provides browser-based live view, autofocus, shutter control, captured-image preview, session-aware recovery, runtime observation, and a path toward remote image transfer.
+
+This repository is both a working prototype and a record of how a developer and Codex built, measured, debugged, and stabilized a real camera system together.
+
+## Why This Project Exists
+
+Modern mirrorless cameras make wireless remote shooting feel normal. Older DSLR bodies often remain optically and mechanically valuable, but their remote workflows are fragmented, fragile, or tied to desktop software.
+
+This project explores whether a Nikon D810 can be made useful as a modern wireless field camera using a small OpenWrt router, a browser UI, and a purpose-built camera-control stack.
+
+## What Works
+
+- Nikon D810 detection through USB/PTP transport
+- Browser-based remote control through the Opal router
+- Live-view streaming through the `ddserver -> bridge -> UI` path
+- AF and shutter actions with serialized command handling
+- Numbered camera sessions and preserved session logs
+- Separate handling for live-view sessions and ordinary camera sessions
+- Runtime observation across UI, CGI, bridge, PTP, and frame-production layers
+- Recovery behavior for degraded session and live-view conditions
+- Captured JPEG preview and full-size image delivery paths
+- Measured live-view improvement from an early approximately 2 FPS baseline to approximately 20 FPS operation and a 26.3 FPS peak
+- Measured captured-preview improvement from approximately 19–20 seconds to around 2 seconds through a bounded preview path
+
+## System Shape
+
+```text
+Nikon D810
+    |
+    | USB / PTP
+    v
+GL.iNet Opal / OpenWrt
+    |
+    +-- ddserver: low-level USB/PTP transport
+    +-- bridge: Nikon command and session orchestration
+    +-- session manager: session lifecycle and rehydration
+    +-- repair/guardian units: runtime recovery signals
+    +-- frame workers and caches: live-view production
+    +-- CGI/WebSocket endpoints: browser-facing API
+    v
+Mobile or desktop browser UI
+```
+
+## Development Story
+
+| Period | Result |
+|---|---|
+| 2026-06-23 | Product direction and wireless DSLR architecture were defined before the hardware was available. |
+| 2026-06-25–06-30 | The D810, Opal, ddserver, bridge, and first browser-control path were connected. |
+| 2026-06-30 | Preview polling was replaced with a WebSocket live-view path; the first baseline was approximately 2 FPS, with a temporary approximately 15 FPS result after reboot. |
+| 2026-06-30–07-17 | Reliability engineering became the priority: numbered sessions, session logs, live-view session separation, repair units, observation, locks, and regression baselines. |
+| 2026-07-18 | GPT-5.6 Sol was used for the second live-view optimization, reaching approximately 20 FPS operation and a measured 26.3 FPS peak. |
+| 2026-07-19 | GPT-5.6 Sol was used to optimize captured-image preview delivery, reducing observed preview time from approximately 19–20 seconds to around 2 seconds. |
+| 2026-07-20 | Tailscale connectivity was verified end-to-end, while Opal RAM usage and service footprint were reduced for field operation. |
+
+## AI-Assisted Development and Developer Responsibility
+
+This project was developed with Codex as an active engineering collaborator. The work was not limited to generating isolated code snippets. Codex was used to inspect a growing codebase, trace failures across hardware and software boundaries, compare reference implementations, propose architecture changes, implement fixes, run tests, inspect logs, and document the resulting system.
+
+Four model variants were used across the project: GPT-5.4, GPT-5.4 mini, GPT-5.6 Luna, and GPT-5.6 Sol. The project uses a strict attribution boundary: GPT-5.6 contributions are attributed only to work performed after 2026-07-18 11:40 KST. Earlier architecture, implementation, and reliability work used GPT-5.4 or GPT-5.4 mini.
+
+The developer remained responsible for:
+
+- Defining the product goal and deciding what the system should do
+- Choosing the architecture and accepting or rejecting proposed changes
+- Connecting and operating the physical D810 and Opal hardware
+- Interpreting camera, USB, PTP, memory, latency, and frame-rate behavior
+- Validating changes on the real device rather than trusting generated code
+- Preserving original images and protecting the recovery path from regressions
+- Deciding what is ready to be called working and what remains experimental
+
+The value of this project is therefore not that AI wrote everything. The value is that AI accelerated investigation and implementation while the developer supplied intent, judgment, verification, and accountability.
+
+## Repository Guide
+
+- `app/remote-ui/` — browser UI, CGI endpoints, bridge, session manager, workers, and recovery units
+- `app/camera-hub/` — JPEG-only Cloudflare Worker/R2 image hub
+- `deploy/openwrt/` — router startup and package integration files
+- `deploy/scripts/` — build, deployment, memory, upload, and contract-test helpers
+- `docs/DSLR_Wireless/` — architecture and reference-implementation analysis
+- `docs/` — development history, stability contracts, performance records, and operational notes
+
+## Hardware and Platform
+
+- Camera: Nikon D810
+- Router: GL.iNet Opal / GL-SFT1200 running OpenWrt
+- Camera transport: USB/PTP through `ddserver`
+- User interface: mobile- and desktop-browser UI served by the Opal
+
+The current prototype is intentionally D810-focused. It is not yet a general-purpose multi-camera platform.
+
+## Running and Testing
+
+The camera platform requires the physical D810, the Opal router, the correct OpenWrt architecture, and the deployed camera-side services. Start with the documents in `docs/` and the scripts in `deploy/scripts/` before changing the active router deployment.
+
+The local image hub can be run separately from `app/camera-hub/`:
+
+```bash
+npm install
+npm run dev
+```
+
+The repository intentionally does not include camera originals, router credentials, local caches, SDK archives, or generated dependency directories.
+
+## Hackathon Context
+
+This project was prepared for OpenAI Build Week. The project existed before the Hackathon Submission Period, so the repository documents the prior foundation separately from the meaningful extension made during the submission period.
+
+The primary hackathon contribution is the post-cutoff optimization and stabilization work: a more responsive live-view pipeline, a much faster captured-image preview path, and continued field reliability work. The primary Codex project thread is recorded in [`docs/hackathon-development-history-2026-07-19.md`](docs/hackathon-development-history-2026-07-19.md).
+
+## Known Limitations
+
+- The supported camera is currently Nikon D810.
+- The system depends on specific OpenWrt router hardware and USB/PTP behavior.
+- Live-view performance depends on camera, session, router, and network state.
+- The final Tailscale and RAM-optimization measurements are recorded in the project history and service-optimization notes.
+- This is a hackathon-scale working prototype, not a finished commercial product.

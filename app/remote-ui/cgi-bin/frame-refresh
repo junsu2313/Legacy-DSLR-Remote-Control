@@ -1,0 +1,152 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+
+SCRIPT_DIR=$(dirname "$0")
+case "$SCRIPT_DIR" in
+  /*) ;;
+  *) SCRIPT_DIR=/www/cgi-bin ;;
+esac
+. "$SCRIPT_DIR/bridge-common.sh"
+
+frame_refresh_trace_log() {
+  if [ -n "$BRIDGE_LOG" ]; then
+    printf '[frame-refresh][%s] %s\n' "$(now_ms)" "$1" >> "$BRIDGE_LOG"
+  fi
+}
+
+FRAME_REFRESH_PIDFILE=${D810D_FRAME_REFRESH_PIDFILE:-/tmp/d810-live-refresh.pid}
+FRAME_REFRESH_LOCKDIR=${D810D_FRAME_REFRESH_LOCKDIR:-/tmp/d810-live-refresh.lock}
+DEFAULT_FRAME_REFRESH_INTERVAL=${D810D_FRAME_REFRESH_INTERVAL:-0.066}
+SESSION_REPAIR_REQUEST=${SESSION_REPAIR_REQUEST:-/tmp/d810-session.repair}
+SESSION_LIVE_REQUEST=${SESSION_LIVE_REQUEST:-/tmp/d810-session.live}
+
+frame_refresh_alive() {
+  pid=$(cat "$FRAME_REFRESH_PIDFILE" 2>/dev/null || true)
+  [ -n "$pid" ] || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+
+clear_stale_lock() {
+  [ -d "$FRAME_REFRESH_LOCKDIR" ] || return 0
+  lock_pid=$(cat "$FRAME_REFRESH_LOCKDIR/pid" 2>/dev/null || true)
+  case "$lock_pid" in
+    ''|*[!0-9]*)
+      rm -f "$FRAME_REFRESH_LOCKDIR/pid" 2>/dev/null || true
+      rmdir "$FRAME_REFRESH_LOCKDIR" 2>/dev/null || true
+      return 0
+      ;;
+  esac
+  if kill -0 "$lock_pid" 2>/dev/null; then
+    return 1
+  fi
+  rm -f "$FRAME_REFRESH_LOCKDIR/pid" 2>/dev/null || true
+  rmdir "$FRAME_REFRESH_LOCKDIR" 2>/dev/null || true
+  return 0
+}
+
+acquire_refresh_lock() {
+  if mkdir "$FRAME_REFRESH_LOCKDIR" 2>/dev/null; then
+    printf '%s\n' "$$" > "$FRAME_REFRESH_LOCKDIR/pid"
+    return 0
+  fi
+  clear_stale_lock || return 1
+  if mkdir "$FRAME_REFRESH_LOCKDIR" 2>/dev/null; then
+    printf '%s\n' "$$" > "$FRAME_REFRESH_LOCKDIR/pid"
+    return 0
+  fi
+  return 1
+}
+
+frame_refresh_start() {
+  if frame_refresh_alive; then
+    return 0
+  fi
+  clear_stale_lock >/dev/null 2>&1 || return 0
+  /bin/sh "$0" run "$DEFAULT_FRAME_REFRESH_INTERVAL" >/dev/null 2>&1 &
+  echo $! > "$FRAME_REFRESH_PIDFILE"
+}
+
+frame_refresh_stop() {
+  pid=$(cat "$FRAME_REFRESH_PIDFILE" 2>/dev/null || true)
+  if [ -n "$pid" ]; then
+    kill "$pid" 2>/dev/null || true
+  fi
+  rm -f "$FRAME_REFRESH_PIDFILE"
+  rm -f "$FRAME_REFRESH_LOCKDIR/pid" 2>/dev/null || true
+  rmdir "$FRAME_REFRESH_LOCKDIR" 2>/dev/null || true
+}
+
+read_mode() {
+  awk -F= '$1=="mode" {print $2; exit}' "$D810D_SESSION_MODE" 2>/dev/null
+}
+
+capture_frame() {
+  frame_refresh_trace_log "capture requested mode=$(read_mode)"
+  out=$(bridge_request FRAME_STORE 2>/dev/null || true)
+  case "$out" in
+    *'"ok":true'*)
+      frame_refresh_trace_log "capture ok"
+      return 0
+      ;;
+  esac
+  frame_refresh_trace_log "capture failed response=${out}"
+  return 1
+}
+
+request_repair() {
+  printf '%s\n' "$$" > "$SESSION_REPAIR_REQUEST"
+}
+
+run_loop() {
+  interval=${1:-0.066}
+  acquire_refresh_lock || exit 0
+  printf '%s\n' "$$" > "$FRAME_REFRESH_PIDFILE"
+  trap 'rm -f "$FRAME_REFRESH_PIDFILE"; rm -f "$FRAME_REFRESH_LOCKDIR/pid" 2>/dev/null || true; rmdir "$FRAME_REFRESH_LOCKDIR" 2>/dev/null || true' EXIT INT TERM
+  failure_streak=0
+  while true; do
+    mode=$(read_mode)
+    if [ "$mode" != "live" ]; then
+      frame_refresh_trace_log "idle mode=${mode}"
+      failure_streak=0
+      sleep 1
+      continue
+    fi
+    if [ ! -f "$SESSION_LIVE_REQUEST" ]; then
+      frame_refresh_trace_log "no live request"
+      failure_streak=0
+      sleep 1
+      continue
+    fi
+    if [ -d /tmp/d810-command.lock ]; then
+      frame_refresh_trace_log "command lock busy"
+      sleep "$interval"
+      continue
+    fi
+    if capture_frame; then
+      failure_streak=0
+      sleep "$interval"
+      continue
+    fi
+    failure_streak=$((failure_streak + 1))
+    if [ "$failure_streak" -eq 1 ] || [ $((failure_streak % 5)) -eq 0 ]; then
+      request_repair
+    fi
+    sleep 1
+  done
+}
+
+case "${1:-start}" in
+  start)
+    frame_refresh_start
+    ;;
+  stop)
+    frame_refresh_stop
+    ;;
+  run)
+    shift
+    run_loop "$@"
+    ;;
+  *)
+    frame_refresh_start
+    ;;
+esac

@@ -1,0 +1,116 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+ACTION=${QUERY_STRING#action=}
+ACTION=${ACTION%%&*}
+SCRIPT_DIR=$(dirname "$0")
+case "$SCRIPT_DIR" in
+  /*) ;;
+  *) SCRIPT_DIR=/www/cgi-bin ;;
+esac
+. "$SCRIPT_DIR/variant-v21-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+
+OUT=""
+STATUS=""
+NEEDS_BRIDGE=0
+
+action_trace_log() {
+  if [ -n "$BRIDGE_LOG" ]; then
+    printf '[action][%s][%s] %s\n' "$(now_ms)" "${ACTION:-unknown}" "$1" >> "$BRIDGE_LOG"
+  fi
+}
+
+action_trace_log "received query=${QUERY_STRING:-}"
+action_trace_log "headers trace=${HTTP_X_D810_TRACE:-} event=${HTTP_X_D810_EVENT:-} client=${HTTP_X_D810_CLIENT:-} ui_at=${HTTP_X_D810_UI_AT:-} ui_stage=${HTTP_X_D810_UI_STAGE:-} ui_action=${HTTP_X_D810_UI_ACTION:-}"
+
+case "$ACTION" in
+  trace)
+    STATUS=logged
+    ;;
+  live-on|live-off|mute|status|shutter|af|recover|reset)
+    NEEDS_BRIDGE=1
+    ;;
+  *)
+    STATUS=unknown
+    ;;
+esac
+
+if [ "$NEEDS_BRIDGE" -eq 1 ] && ! bridge_start; then
+  action_trace_log "bridge_start failed"
+  printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+  printf '{"ok":false,"action":"%s","status":"bridge_unavailable"}\n' "$ACTION"
+  exit 0
+fi
+
+case "$ACTION" in
+  trace)
+    action_trace_log "trace event query=${QUERY_STRING:-}"
+    OUT='{"ok":true,"action":"trace","status":"logged"}'
+    ;;
+  live-on)
+    action_trace_log "forwarding LIVE_START"
+    OUT=$(bridge_request LIVE_START)
+    action_trace_log "bridge response=${OUT}"
+    case "$OUT" in
+      *'"ok":true'*)
+        printf '%s\n' "$ACTION" > "$SESSION_LIVE_REQUEST"
+        action_trace_log "live request file updated"
+        ;;
+    esac
+    ;;
+  live-off|mute)
+    action_trace_log "forwarding LIVE_STOP"
+    rm -f "$SESSION_LIVE_REQUEST" "$SESSION_REPAIR_REQUEST"
+    /bin/sh "$SCRIPT_DIR/frame-refresh-v21" stop >/dev/null 2>&1 || true
+    OUT=$(bridge_request LIVE_STOP)
+    action_trace_log "bridge response=${OUT}"
+    ;;
+  live-fallback)
+    /bin/sh "$SCRIPT_DIR/frame-refresh-v21" stop >/dev/null 2>&1 || true
+    OUT='{"ok":true,"status":"live_fallback_ready","liveView":true}'
+    ;;
+  status)
+    action_trace_log "forwarding STATUS"
+    OUT=$(bridge_request STATUS)
+    action_trace_log "bridge response=${OUT}"
+    ;;
+  shutter)
+    action_trace_log "forwarding SHUTTER"
+    OUT=$(bridge_request SHUTTER)
+    action_trace_log "bridge response=${OUT}"
+    ;;
+  af)
+    action_trace_log "forwarding AF"
+    OUT=$(bridge_request AF)
+    action_trace_log "bridge response=${OUT}"
+    ;;
+  recover)
+    action_trace_log "forwarding RECOVER"
+    OUT=$(bridge_request RECOVER)
+    action_trace_log "bridge response=${OUT}"
+    if [ -f "$SESSION_LIVE_REQUEST" ] || [ -f "${D810D_LIVE_SESSION_PATH:-/tmp/d810-live-v21.session}" ]; then
+      action_trace_log "restoring live session after recovery"
+      LIVE_OUT=$(bridge_request LIVE_START)
+      case "$LIVE_OUT" in
+        *'"ok":true'*) OUT="$LIVE_OUT" ;;
+      esac
+      action_trace_log "live restore response=${LIVE_OUT}"
+    fi
+    ;;
+  reset)
+    action_trace_log "reset requested"
+    rm -f "$SESSION_LIVE_REQUEST" "$SESSION_REPAIR_REQUEST"
+    bridge_restart_stack
+    OUT='{"ok":true,"action":"reset","status":"restarting"}'
+    action_trace_log "bridge restart stack requested"
+    ;;
+esac
+
+printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+if [ -n "$OUT" ]; then
+  printf '%s\n' "$OUT"
+elif [ "$STATUS" = "unknown" ]; then
+  printf '{"ok":false,"action":"%s","status":"unknown"}\n' "$ACTION"
+else
+  printf '{"ok":false,"action":"%s","status":"bridge_unavailable"}\n' "$ACTION"
+fi

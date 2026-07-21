@@ -1,0 +1,90 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+SCRIPT_DIR=$(dirname "$0")
+. "$SCRIPT_DIR/variant-v21-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+FRAME_PATH=${D810D_CAPTURED_PREVIEW_PATH:-/tmp/d810-captured-preview.jpg}
+FRAME_META_PATH=${D810D_CAPTURED_PREVIEW_META:-/tmp/d810-captured-preview.meta}
+
+json_number_field() {
+  key=$1
+  text=$2
+  printf '%s' "$text" | sed -n "s/.*\"$key\":\([0-9][0-9]*\).*/\1/p" | head -n 1
+}
+
+json_text_field() {
+  key=$1
+  text=$2
+  printf '%s' "$text" | sed -n "s/.*\"$key\":\"\\([^\"]*\\)\".*/\\1/p" | head -n 1
+}
+
+meta_number_field() {
+  key=$1
+  if [ -r "$FRAME_META_PATH" ]; then
+    sed -n "s/^$key=//p" "$FRAME_META_PATH" | head -n 1
+  fi
+}
+
+emit_frame_headers() {
+  printf 'Content-Type: image/jpeg\r\nCache-Control: no-store, no-cache, must-revalidate\r\nPragma: no-cache\r\nExpires: 0\r\n'
+  STARTED_AT=$(meta_number_field startedAt)
+  SELECT_DONE_AT=$(meta_number_field selectDoneAt)
+  DOWNLOAD_DONE_AT=$(meta_number_field downloadDoneAt)
+  WRITE_DONE_AT=$(meta_number_field writeDoneAt)
+  TOTAL_MS=$(meta_number_field totalMs)
+  QUERY_MS=$(meta_number_field queryMs)
+  DOWNLOAD_MS=$(meta_number_field downloadMs)
+  BYTES=$(meta_number_field bytes)
+  OBJECT_HANDLE=$(meta_number_field objectHandle)
+  [ -n "$STARTED_AT" ] && printf 'X-D810-Captured-Started-At-Ms: %s\r\n' "$STARTED_AT"
+  [ -n "$SELECT_DONE_AT" ] && printf 'X-D810-Captured-Select-Done-At-Ms: %s\r\n' "$SELECT_DONE_AT"
+  [ -n "$DOWNLOAD_DONE_AT" ] && printf 'X-D810-Captured-Download-Done-At-Ms: %s\r\n' "$DOWNLOAD_DONE_AT"
+  [ -n "$WRITE_DONE_AT" ] && printf 'X-D810-Captured-Write-Done-At-Ms: %s\r\n' "$WRITE_DONE_AT"
+  [ -n "$TOTAL_MS" ] && printf 'X-D810-Captured-Total-Ms: %s\r\n' "$TOTAL_MS"
+  [ -n "$QUERY_MS" ] && printf 'X-D810-Captured-Query-Ms: %s\r\n' "$QUERY_MS"
+  [ -n "$DOWNLOAD_MS" ] && printf 'X-D810-Captured-Download-Ms: %s\r\n' "$DOWNLOAD_MS"
+  [ -n "$BYTES" ] && printf 'X-D810-Captured-Bytes: %s\r\n' "$BYTES"
+  [ -n "$OBJECT_HANDLE" ] && printf 'X-D810-Captured-Object-Handle: %s\r\n' "$OBJECT_HANDLE"
+  printf '\r\n'
+}
+
+serve_frame_file() {
+  if [ -r "$FRAME_PATH" ] && [ -s "$FRAME_PATH" ]; then
+    emit_frame_headers
+    cat "$FRAME_PATH"
+    return 0
+  fi
+  return 1
+}
+
+if bridge_start; then
+  if serve_frame_file; then
+    exit 0
+  fi
+
+  FRAME_META=$(bridge_request CAPTURED_JPEG)
+  if [ -n "$FRAME_META" ] && printf '%s' "$FRAME_META" | grep -q '"ok":true'; then
+    if serve_frame_file; then
+      exit 0
+    fi
+    STARTED_AT=$(json_number_field startedAt "$FRAME_META")
+    SELECT_DONE_AT=$(json_number_field selectDoneAt "$FRAME_META")
+    DOWNLOAD_DONE_AT=$(json_number_field downloadDoneAt "$FRAME_META")
+    WRITE_DONE_AT=$(json_number_field writeDoneAt "$FRAME_META")
+    TOTAL_MS=$(json_number_field totalMs "$FRAME_META")
+    QUERY_MS=$(json_number_field queryMs "$FRAME_META")
+    DOWNLOAD_MS=$(json_number_field downloadMs "$FRAME_META")
+    BYTES=$(json_number_field bytes "$FRAME_META")
+    OBJECT_HANDLE=$(json_number_field objectHandle "$FRAME_META")
+    emit_frame_headers
+    if command -v openssl >/dev/null 2>&1; then
+      "$LUA_BIN" "$BRIDGE_SCRIPT" CAPTURED_JPEG_BIN 2>>"$BRIDGE_LOG" | openssl base64 -d -A
+    else
+      "$LUA_BIN" "$BRIDGE_SCRIPT" CAPTURED_JPEG_BIN 2>>"$BRIDGE_LOG" | base64 -d
+    fi
+    exit $?
+  fi
+fi
+
+printf 'Status: 404 Not Found\r\nContent-Type: application/json\r\nCache-Control: no-store, no-cache, must-revalidate\r\nPragma: no-cache\r\nExpires: 0\r\n\r\n'
+printf '{"ok":false,"status":"captured_preview_unavailable"}\n'

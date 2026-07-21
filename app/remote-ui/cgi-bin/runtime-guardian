@@ -1,0 +1,74 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+
+SCRIPT_DIR=$(dirname "$0")
+case "$SCRIPT_DIR" in
+  /*) ;;
+  *) SCRIPT_DIR=/www/cgi-bin ;;
+esac
+. "$SCRIPT_DIR/variant-v21-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+
+RUNTIME_GUARDIAN_PIDFILE=${D810D_RUNTIME_GUARDIAN_PIDFILE:-/tmp/d810-runtime-guardian.pid}
+RUNTIME_GUARDIAN_INTERVAL=${D810D_RUNTIME_GUARDIAN_INTERVAL:-2}
+
+guardian_log() {
+  printf '[runtime-guardian][%s] %s\n' "$(now_ms)" "$1" >> "$BRIDGE_LOG"
+}
+
+write_pid() {
+  printf '%s\n' "$$" > "$RUNTIME_GUARDIAN_PIDFILE"
+}
+
+clear_pid() {
+  rm -f "$RUNTIME_GUARDIAN_PIDFILE"
+}
+
+boot_bridge() {
+  if ! bridge_only_start; then
+    guardian_log "bridge start failed"
+    return 1
+  fi
+  boot_result=$(bridge_request BOOT 2>/dev/null || true)
+  case "$boot_result" in
+    *'"ok":true'*) guardian_log "bridge boot recovered" ;;
+    *) guardian_log "bridge boot failed"; return 1 ;;
+  esac
+  if [ -f "$SESSION_LIVE_REQUEST" ] || [ -f "${D810D_LIVE_SESSION_PATH:-/tmp/d810-live-v21.session}" ]; then
+    bridge_request LIVE_START >/dev/null 2>&1 || guardian_log "live restore failed"
+  fi
+  return 0
+}
+
+ensure_runtime() {
+  if ! bridge_alive; then
+    guardian_log "bridge unavailable; recovering runtime"
+    boot_bridge || return 0
+  fi
+  if ! ws_alive; then
+    guardian_log "websocket unavailable; restarting websocket"
+    ws_start >/dev/null 2>&1 || guardian_log "websocket restart failed"
+  fi
+  if ! battery_worker_alive; then
+    battery_worker_start >/dev/null 2>&1 || guardian_log "battery worker restart failed"
+  fi
+}
+
+repair_live() {
+  [ -f "$SESSION_REPAIR_REQUEST" ] || return 0
+  [ -f "$SESSION_LIVE_REQUEST" ] || return 0
+  rm -f "$SESSION_REPAIR_REQUEST"
+  guardian_log "repair requested; recovering camera live session"
+  bridge_request RECOVER >/dev/null 2>&1 || guardian_log "camera recover failed"
+  bridge_request LIVE_START >/dev/null 2>&1 || guardian_log "live restart failed"
+}
+
+write_pid
+trap 'clear_pid' EXIT INT TERM HUP
+guardian_log "started"
+
+while true; do
+  ensure_runtime
+  repair_live
+  sleep "$RUNTIME_GUARDIAN_INTERVAL"
+done

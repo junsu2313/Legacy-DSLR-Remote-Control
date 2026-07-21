@@ -1,0 +1,1583 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <title>D810 Remote App</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg0: #050505;
+      --bg1: #0a0a0a;
+      --bg2: #111111;
+      --line: rgba(255, 255, 255, 0.08);
+      --line-strong: rgba(255, 255, 255, 0.16);
+      --text: #f3f3f3;
+      --muted: #a5a5a5;
+      --accent: #f3f3f3;
+      --gold: #f3f3f3;
+      --danger: #f3f3f3;
+      --preview-h: 36vh;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: linear-gradient(180deg, var(--bg2), var(--bg1) 48%, var(--bg0));
+      color: var(--text);
+      font: 500 16px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 0;
+      padding: 0 0 12px;
+    }
+
+    .topbar {
+      display: none;
+    }
+
+    .preview-card {
+      position: relative;
+      overflow: hidden;
+      min-height: clamp(240px, var(--preview-h), 43vh);
+      background: #000;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .preview-frame {
+      width: 100%;
+      height: clamp(240px, var(--preview-h), 43vh);
+      display: block;
+      background: linear-gradient(135deg, #141414, #090909 42%, #1b1b1b);
+    }
+
+    .preview-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: auto;
+      padding: 10px;
+    }
+
+    .overlay-badge {
+      position: absolute;
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      background: rgba(8, 8, 8, 0.62);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: rgba(243, 243, 243, 0.9);
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      backdrop-filter: blur(8px);
+    }
+
+    .overlay-badge strong {
+      font-size: 12px;
+      font-weight: 650;
+      color: #ffffff;
+    }
+
+    .overlay-time {
+      top: 10px;
+      right: 10px;
+    }
+
+    .overlay-camera {
+      left: 10px;
+      bottom: 10px;
+    }
+
+    .shot-preview {
+      position: absolute;
+      right: 10px;
+      bottom: 10px;
+      width: min(25%, 210px);
+      min-width: 96px;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(10, 10, 10, 0.9);
+      box-shadow: 0 12px 26px rgba(0, 0, 0, 0.28);
+      cursor: pointer;
+      z-index: 2;
+    }
+
+    .shot-preview[hidden] {
+      display: none;
+    }
+
+    .shot-viewer {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      background: rgba(0, 0, 0, 0.96);
+    }
+
+    .shot-viewer[hidden] {
+      display: none;
+    }
+
+    .shot-viewer-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      color: rgba(243, 243, 243, 0.9);
+      font-size: 12px;
+    }
+
+    .shot-viewer-body {
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      padding: 12px;
+    }
+
+    .shot-viewer-image {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 12px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+      background: #000;
+    }
+
+    .control-card {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 0;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px 10px;
+      gap: 10px;
+    }
+
+    .toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .battery-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 30px;
+      padding: 0 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 650;
+      white-space: nowrap;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .battery-pill strong {
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .session-condition {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 24px;
+      margin-top: 6px;
+      padding: 0 10px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      color: rgba(243, 243, 243, 0.82);
+      font-size: 10px;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      background: rgba(255, 255, 255, 0.015);
+    }
+
+    .session-condition strong {
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .session-id {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 24px;
+      margin-top: 6px;
+      margin-left: 8px;
+      padding: 0 10px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      color: rgba(243, 243, 243, 0.78);
+      font-size: 10px;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      background: rgba(255, 255, 255, 0.012);
+    }
+
+    .session-id strong {
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .live-metrics {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-left: 8px;
+      color: rgba(231, 236, 240, 0.78);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .live-metrics strong {
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .small-btn {
+      min-height: 30px;
+      min-width: 30px;
+      padding: 0 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--text);
+      font-weight: 650;
+      font-size: 11px;
+      touch-action: manipulation;
+    }
+
+    .small-btn.primary {
+      color: var(--text);
+      border-color: rgba(255, 255, 255, 0.24);
+    }
+
+    .control-stage {
+      position: relative;
+      min-height: clamp(300px, 42vh, 52vh);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0.005));
+      overflow: hidden;
+    }
+
+    .control-stage.editing {
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+    }
+
+    .control-node {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: var(--size, 80px);
+      height: var(--size, 80px);
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text);
+      background:
+        radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.12), transparent 36%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+      display: grid;
+      place-items: center;
+      text-align: center;
+      cursor: pointer;
+      touch-action: none;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      transition: transform 70ms ease, background 90ms ease, border-color 90ms ease, box-shadow 90ms ease, opacity 90ms ease;
+    }
+
+    .control-node > div {
+      display: grid;
+      gap: 1px;
+    }
+
+    .control-node strong {
+      font-size: 15px;
+      line-height: 1;
+      letter-spacing: 0.02em;
+    }
+
+    .control-node span {
+      color: var(--muted);
+      font-size: 9px;
+      line-height: 1;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .control-node.primary {
+      color: var(--text);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .control-node.accent {
+      color: var(--text);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .control-node.danger {
+      color: var(--text);
+      border-color: rgba(255, 255, 255, 0.16);
+    }
+
+    .control-node.dragging {
+      background: rgba(255, 255, 255, 0.08);
+      z-index: 20;
+    }
+
+    .control-node.pressed {
+      transform: translate(-50%, -50%) scale(0.955);
+      border-color: rgba(255, 255, 255, 0.34);
+      background:
+        radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.18), transparent 38%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015));
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+
+    .control-node.busy {
+      border-color: rgba(255, 255, 255, 0.28);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 10px 22px rgba(0, 0, 0, 0.22);
+    }
+
+    .control-node.cooldown {
+      opacity: 0.56;
+    }
+
+    .control-node.editing {
+      outline: 2px solid rgba(120, 228, 204, 0.32);
+      outline-offset: 4px;
+    }
+
+    .hidden-status {
+      display: none;
+    }
+
+    @media (orientation: landscape) {
+      :root { --preview-h: 30vh; }
+      .app {
+        grid-template-columns: minmax(0, 0.92fr) minmax(320px, 0.88fr);
+        grid-template-rows: auto auto 1fr;
+        grid-template-areas:
+          "top top"
+          "preview controls"
+          "preview controls";
+      }
+
+      .topbar { grid-area: top; }
+
+      .preview-card {
+        grid-area: preview;
+        border-right: 1px solid var(--line);
+        border-bottom: 0;
+      }
+
+      .control-card { grid-area: controls; }
+      .control-stage { min-height: 44vh; }
+    }
+
+    @media (max-width: 520px) {
+      .topbar,
+      .toolbar {
+        padding-left: 10px;
+        padding-right: 10px;
+      }
+
+      .control-node {
+        width: var(--size-mobile, var(--size, 88px));
+        height: var(--size-mobile, var(--size, 88px));
+      }
+
+      .shot-preview {
+        width: min(25%, 150px);
+        min-width: 82px;
+      }
+
+      .overlay-badge {
+        font-size: 10px;
+        padding: 5px 8px;
+      }
+
+      .control-node strong {
+        font-size: 13px;
+      }
+
+      .control-node span {
+        font-size: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar"></header>
+
+    <section class="preview-card">
+      <img id="liveFrame" class="preview-frame" alt="Live view" />
+      <div class="preview-overlay">
+        <div class="overlay-badge overlay-time">Time <strong id="lastUpdate">--:--:--</strong></div>
+        <div class="overlay-badge overlay-camera">Camera <strong id="statusConn">Detecting</strong></div>
+        <img id="shotThumbImage" class="shot-preview" alt="Captured preview" hidden />
+      </div>
+    </section>
+
+    <section class="control-card">
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <div>
+            <div class="battery-pill">
+              Battery <strong id="batteryLevel">--%</strong>
+              <span class="live-metrics">
+                <span>FPS <strong id="fpsMeter">--</strong></span>
+                <span>Latency <strong id="latencyMeter">--</strong></span>
+              </span>
+            </div>
+            <div class="session-condition">Session Condition <strong id="sessionCondition">Preparing</strong></div>
+            <div class="session-id">Session <strong id="sessionLabel">---</strong></div>
+          </div>
+        </div>
+        <div class="toolbar-actions">
+          <button id="toggleEdit" class="small-btn">Edit</button>
+          <button id="saveLayout" class="small-btn primary" hidden>Save</button>
+        </div>
+      </div>
+
+      <div id="controlStage" class="control-stage">
+        <button class="control-node accent" data-id="af" data-action="af" style="--size:70px;--size-mobile:64px;"><div><strong>AF</strong><span>focus</span></div></button>
+        <button class="control-node primary" data-id="shutter" data-action="shutter" style="--size:88px;--size-mobile:80px;"><div><strong>SHOT</strong><span>capture</span></div></button>
+        <button class="control-node accent" data-id="liveOn" data-action="live-on" style="--size:68px;--size-mobile:62px;"><div><strong>LIVE</strong><span>start</span></div></button>
+        <button class="control-node danger" data-id="liveOff" data-action="live-off" style="--size:68px;--size-mobile:62px;"><div><strong>STOP</strong><span>live</span></div></button>
+        <button class="control-node danger" data-id="reset" data-action="reset" style="--size:72px;--size-mobile:66px;"><div><strong>KILL</strong><span>cmd</span></div></button>
+      </div>
+    </section>
+
+    <div class="hidden-status" aria-hidden="true">
+      <span id="connState">Detecting</span>
+      <span id="heroState">Checking device availability</span>
+      <span id="lastAction">Last action: none</span>
+      <span id="layoutNotice">Layout mode off</span>
+      <span id="previewMode">idle</span>
+      <span id="cameraState">Preparing</span>
+      <span id="previewState">manual</span>
+      <span id="statusSource">bridge /cgi-bin/liveview</span>
+      <span id="frameType">--</span>
+    </div>
+  </div>
+
+  <section id="shotViewer" class="shot-viewer" hidden aria-label="Captured JPEG viewer">
+    <div class="shot-viewer-bar">
+      <span>Captured JPEG</span>
+      <button id="shotViewerClose" class="small-btn primary" type="button">Back</button>
+    </div>
+    <div class="shot-viewer-body">
+      <img id="shotViewerImage" class="shot-viewer-image" alt="Captured JPEG full view" />
+    </div>
+  </section>
+
+  <script>
+    const liveFrame = document.getElementById("liveFrame");
+    const connState = document.getElementById("connState");
+    const heroState = document.getElementById("heroState");
+    const lastAction = document.getElementById("lastAction");
+    const lastUpdate = document.getElementById("lastUpdate");
+    const previewMode = document.getElementById("previewMode");
+    const previewState = document.getElementById("previewState");
+    const statusConn = document.getElementById("statusConn");
+    const cameraState = document.getElementById("cameraState");
+    const statusSource = document.getElementById("statusSource");
+    const frameType = document.getElementById("frameType");
+    const layoutNotice = document.getElementById("layoutNotice");
+    const batteryLevel = document.getElementById("batteryLevel");
+    const fpsMeter = document.getElementById("fpsMeter");
+    const latencyMeter = document.getElementById("latencyMeter");
+    const sessionCondition = document.getElementById("sessionCondition");
+    const sessionLabel = document.getElementById("sessionLabel");
+    const toggleEdit = document.getElementById("toggleEdit");
+    const saveLayout = document.getElementById("saveLayout");
+    const shotThumbImage = document.getElementById("shotThumbImage");
+    const shotViewer = document.getElementById("shotViewer");
+    const shotViewerImage = document.getElementById("shotViewerImage");
+    const shotViewerClose = document.getElementById("shotViewerClose");
+    const controlStage = document.getElementById("controlStage");
+    const controlNodes = Array.from(document.querySelectorAll(".control-node"));
+
+    const query = new URLSearchParams(window.location.search);
+    const apiVariant = query.get("variant") || "";
+    const apiSuffix = apiVariant === "v21" ? "-v21" : "";
+    const BOOT_TOKEN = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const API = {
+      status: `/cgi-bin/status${apiSuffix}?boot=${BOOT_TOKEN}`,
+      liveview: `/cgi-bin/liveview${apiSuffix}?boot=${BOOT_TOKEN}`,
+      action: `/cgi-bin/action${apiSuffix}`,
+      capturedPreview: "/cgi-bin/captured-preview",
+    };
+    const LAYOUT_STORAGE_KEY = "d810-cc-layout-v1";
+    const SHOT_PREVIEW_STORAGE_KEY = "d810-shot-preview-dataurl";
+    const SHOT_PREVIEW_AT_KEY = "d810-shot-preview-at";
+    const DEFAULT_LAYOUT = {
+      af: { x: 72, y: 24 },
+      shutter: { x: 88, y: 24 },
+      liveOn: { x: 88, y: 44 },
+      liveOff: { x: 72, y: 64 },
+      reset: { x: 50, y: 82 },
+    };
+    const LEGACY_DEFAULT_LAYOUT = {
+      af: { x: 22, y: 38 },
+      shutter: { x: 50, y: 72 },
+      liveOn: { x: 76, y: 28 },
+      liveOff: { x: 20, y: 74 },
+    };
+
+    const actionMessages = {
+      af: "Auto focus triggered",
+      shutter: "Shutter fired",
+      "live-on": "Live preview started",
+      "live-off": "Live preview stopped",
+      reset: "Current command killed",
+    };
+    const actionResumeDelay = {
+      af: 120,
+      shutter: 450,
+    };
+
+    let liveMode = false;
+    let liveSocket = null;
+    let liveSocketMeta = null;
+    let currentFrameSeq = 0;
+    let editMode = false;
+    let dragState = null;
+    let shotThumbUrl = "";
+    let currentCameraPhase = "Detecting";
+    let currentSessionPhase = "Preparing";
+    let actionInFlight = false;
+    let statusRefreshTimer = null;
+    let liveLoopTimer = null;
+    let frameFetchInFlight = false;
+    let requestTraceSeq = 0;
+    let activeControlNode = null;
+    let activePointerId = null;
+    let actionStartedAt = 0;
+    let liveFrameObjectUrl = "";
+    let startupPhaseLocked = false;
+    let currentActionController = null;
+    const LIVE_STATS_WINDOW_MS = 1500;
+    let liveFrameTimes = [];
+    let liveLatencySamples = [];
+    let currentLiveFps = null;
+    let currentAvgLatencyMs = null;
+
+    const LIVE_INITIAL_DELAY_MS = 0;
+    const LIVE_FRAME_DELAY_MS = 0;
+    const LIVE_PENDING_DELAY_MS = 32;
+    const LIVE_RETRY_DELAY_MS = 80;
+    const STATUS_REFRESH_INTERVAL_MS = 3000;
+    const TRANSIENT_STATUS_REFRESH_INTERVAL_MS = 1000;
+    const PLACEHOLDER_URL = "data:image/svg+xml;utf8," + encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1067">
+        <defs>
+          <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#141414"/>
+            <stop offset="50%" stop-color="#090909"/>
+            <stop offset="100%" stop-color="#1c1c1c"/>
+          </linearGradient>
+        </defs>
+        <rect width="1600" height="1067" fill="url(#bg)"/>
+        <circle cx="310" cy="850" r="240" fill="rgba(255,255,255,0.04)"/>
+        <circle cx="1280" cy="180" r="160" fill="rgba(255,255,255,0.06)"/>
+        <rect x="82" y="302" width="1436" height="572" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
+        <text x="94" y="164" fill="rgba(237,244,255,0.86)" font-size="54" font-family="Arial, sans-serif">Live View Ready</text>
+        <text x="94" y="220" fill="rgba(159,176,199,0.88)" font-size="28" font-family="Arial, sans-serif">Use the circular buttons below</text>
+      </svg>`
+    );
+
+    function stampTime() {
+      lastUpdate.textContent = new Date().toLocaleTimeString("ko-KR", { hour12: false });
+    }
+
+    function shellStatus(text, detail) {
+      connState.textContent = text;
+      heroState.textContent = detail;
+    }
+
+    function applyCameraPhase(phase, detail = "") {
+      currentCameraPhase = phase;
+      statusConn.textContent = phase;
+      connState.textContent = phase;
+      heroState.textContent = detail;
+    }
+
+    function applySessionPhase(phase, detail = "") {
+      currentSessionPhase = phase;
+      sessionCondition.textContent = phase;
+      cameraState.textContent = phase;
+    }
+
+    function cameraPhaseRank(phase) {
+      return phase === "Connect" ? 2 : 1;
+    }
+
+    function sessionPhaseRank(phase) {
+      return phase === "Ready" ? 2 : 1;
+    }
+
+    function applyCameraPhaseProgressive(phase, detail = "", options = {}) {
+      const nextPhase = phase || "Detecting";
+      if (!options.force && cameraPhaseRank(nextPhase) < cameraPhaseRank(currentCameraPhase)) {
+        return;
+      }
+      applyCameraPhase(nextPhase, detail);
+    }
+
+    function applySessionPhaseProgressive(phase, detail = "", options = {}) {
+      if (startupPhaseLocked && !options.allowAfterLock) {
+        return;
+      }
+      const nextPhase = phase || "Preparing";
+      if (!options.force && sessionPhaseRank(nextPhase) < sessionPhaseRank(currentSessionPhase)) {
+        return;
+      }
+      applySessionPhase(nextPhase, detail);
+    }
+
+    function deriveCameraPhase(data = {}, options = {}) {
+      const backendState = String(data.backendState || "");
+      const live = Boolean(options.live ?? data.liveView);
+      const cameraDetected = data.cameraDetected === true;
+      const hardwareDetected = data.hardwareDetected === true;
+      const connected = data.connected === true || data.transportReady === true;
+      if (cameraDetected || hardwareDetected || connected || backendState === "connecting" || backendState === "ready" || backendState === "live") {
+        return {
+          phase: "Connect",
+          detail: live ? "Camera link is established" : "Camera link is established",
+        };
+      }
+      return {
+        phase: "Detecting",
+        detail: "Checking whether the camera is attached",
+      };
+    }
+
+    function deriveSessionPhase(data = {}, options = {}) {
+      const backendState = String(data.backendState || "");
+      const live = Boolean(options.live ?? data.liveView);
+      const connected = data.connected === true;
+      const transportReady = data.transportReady === true;
+      const softwareReady = data.softwareReady === true
+        || data.status === "ready"
+        || data.status === "liveview_on";
+
+      if (backendState === "recovering" || backendState === "degraded") {
+        return {
+          phase: "Preparing",
+          detail: live ? "Recovering the live session" : "Recovering the camera session",
+        };
+      }
+
+      if (softwareReady && (connected || transportReady || backendState === "live" || backendState === "ready")) {
+        return {
+          phase: "Ready",
+          detail: live ? "Live view and commands are ready right away" : "Camera is ready for commands",
+        };
+      }
+
+      return {
+        phase: "Preparing",
+        detail: live ? "Preparing the live session" : "Preparing the camera session",
+      };
+    }
+
+    function setAction(text) {
+      lastAction.textContent = `Last action: ${text}`;
+      stampTime();
+    }
+
+    function setBatteryLevel(value) {
+      const next = Number(value);
+      batteryLevel.textContent = Number.isFinite(next) ? `${Math.max(0, Math.min(100, Math.round(next)))}%` : "--%";
+    }
+
+    function setSessionCondition(value) {
+      sessionCondition.textContent = String(value || "Ready");
+    }
+
+    function setSessionIdentity(value) {
+      sessionLabel.textContent = String(value || "---");
+    }
+
+    function formatSessionIdentity(data = {}) {
+      if (typeof data.sessionLabel === "string" && data.sessionLabel) {
+        return data.sessionLabel;
+      }
+      const sessionId = Number(data.sessionId);
+      if (Number.isFinite(sessionId) && sessionId > 0) {
+        return `${String(Math.round(sessionId)).padStart(3, "0")}_세션`;
+      }
+      return "";
+    }
+
+    function formatCompactFps(value) {
+      return Number.isFinite(value) && value >= 0 ? value.toFixed(1) : "--";
+    }
+
+    function formatCompactLatency(value) {
+      return Number.isFinite(value) && value >= 0 ? `${Math.round(value)}ms` : "--";
+    }
+
+    function pushWindowSample(queue, timestamp, windowMs) {
+      if (!Number.isFinite(timestamp) || timestamp <= 0) {
+        return null;
+      }
+      queue.push(timestamp);
+      const minTime = timestamp - windowMs;
+      while (queue.length && queue[0] < minTime) {
+        queue.shift();
+      }
+      if (queue.length < 2) {
+        return 0;
+      }
+      const span = queue[queue.length - 1] - queue[0];
+      return span > 0 ? ((queue.length - 1) * 1000) / span : 0;
+    }
+
+    function pushLatencySample(queue, timestamp, value, windowMs) {
+      if (!Number.isFinite(timestamp) || timestamp <= 0 || !Number.isFinite(value) || value < 0) {
+        return null;
+      }
+      queue.push({ t: timestamp, v: value });
+      const minTime = timestamp - windowMs;
+      while (queue.length && queue[0].t < minTime) {
+        queue.shift();
+      }
+      if (!queue.length) {
+        return null;
+      }
+      const total = queue.reduce((sum, sample) => sum + sample.v, 0);
+      return total / queue.length;
+    }
+
+    function updateLiveMetrics() {
+      fpsMeter.textContent = formatCompactFps(currentLiveFps);
+      latencyMeter.textContent = formatCompactLatency(currentAvgLatencyMs);
+    }
+
+    function resetLiveMetrics() {
+      liveFrameTimes = [];
+      liveLatencySamples = [];
+      currentLiveFps = null;
+      currentAvgLatencyMs = null;
+      updateLiveMetrics();
+    }
+
+    async function refreshBatteryLevel() {
+      setBatteryLevel(undefined);
+    }
+
+    function revokeShotThumbUrl() {
+      if (!shotThumbUrl) {
+        return;
+      }
+      URL.revokeObjectURL(shotThumbUrl);
+      shotThumbUrl = "";
+    }
+
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error || new Error("file_read_failed"));
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function storeShotPreview(blob) {
+      revokeShotThumbUrl();
+      shotThumbUrl = URL.createObjectURL(blob);
+      shotThumbImage.src = shotThumbUrl;
+      shotThumbImage.hidden = false;
+      try {
+        const dataUrl = await blobToDataUrl(blob);
+        sessionStorage.setItem(SHOT_PREVIEW_STORAGE_KEY, dataUrl);
+        sessionStorage.setItem(SHOT_PREVIEW_AT_KEY, String(Date.now()));
+      } catch (_) {}
+    }
+
+    function restoreShotPreview() {
+      try {
+        const dataUrl = sessionStorage.getItem(SHOT_PREVIEW_STORAGE_KEY);
+        if (dataUrl) {
+          shotThumbImage.src = dataUrl;
+          shotThumbImage.hidden = false;
+        }
+      } catch (_) {}
+    }
+
+    function clearVolatileInspectionState() {
+      try {
+        sessionStorage.removeItem(SHOT_PREVIEW_STORAGE_KEY);
+        sessionStorage.removeItem(SHOT_PREVIEW_AT_KEY);
+      } catch (_) {}
+      revokeShotThumbUrl();
+      shotThumbImage.removeAttribute("src");
+      shotThumbImage.hidden = true;
+    }
+
+    function isReloadNavigation() {
+      try {
+        const nav = performance.getEntriesByType("navigation")[0];
+        if (nav && nav.type === "reload") {
+          return true;
+        }
+      } catch (_) {}
+      return performance.navigation && performance.navigation.type === 1;
+    }
+
+    function showShotViewer() {
+      const src = shotThumbImage.src;
+      if (!src) {
+        return;
+      }
+      shotViewerImage.src = src;
+      shotViewer.hidden = false;
+    }
+
+    function hideShotViewer() {
+      shotViewer.hidden = true;
+    }
+
+    function drawPlaceholder() {
+      liveFrame.src = PLACEHOLDER_URL;
+    }
+
+    function loadLayout() {
+      try {
+        const raw = localStorage.getItem(LAYOUT_STORAGE_KEY);
+        if (!raw) {
+          return { ...DEFAULT_LAYOUT };
+        }
+        const parsed = JSON.parse(raw);
+        const merged = { ...DEFAULT_LAYOUT, ...parsed };
+        const looksLegacy = Object.keys(LEGACY_DEFAULT_LAYOUT).every((key) => {
+          const legacy = LEGACY_DEFAULT_LAYOUT[key];
+          const current = merged[key];
+          return current && Number(current.x) === legacy.x && Number(current.y) === legacy.y;
+        });
+        return looksLegacy ? { ...DEFAULT_LAYOUT } : merged;
+      } catch (_) {
+        return { ...DEFAULT_LAYOUT };
+      }
+    }
+
+    function persistLayout(layout) {
+      localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layout));
+    }
+
+    function currentLayout() {
+      const layout = {};
+      for (const node of controlNodes) {
+        layout[node.dataset.id] = { x: Number(node.dataset.x || 50), y: Number(node.dataset.y || 50) };
+      }
+      return layout;
+    }
+
+    function applyLayout(layout) {
+      for (const node of controlNodes) {
+        const point = layout[node.dataset.id] || DEFAULT_LAYOUT[node.dataset.id] || { x: 50, y: 50 };
+        const x = Math.max(8, Math.min(92, Number(point.x) || 50));
+        const y = Math.max(10, Math.min(90, Number(point.y) || 50));
+        node.dataset.x = String(x);
+        node.dataset.y = String(y);
+        node.style.left = `${x}%`;
+        node.style.top = `${y}%`;
+      }
+    }
+
+    function setEditMode(next) {
+      editMode = !!next;
+      controlStage.classList.toggle("editing", editMode);
+      for (const node of controlNodes) {
+        node.classList.toggle("editing", editMode);
+      }
+      toggleEdit.textContent = editMode ? "Done" : "Edit";
+      saveLayout.hidden = !editMode;
+      layoutNotice.textContent = editMode ? "Drag buttons, then save" : "Layout off";
+    }
+
+    function updateNodePosition(node, clientX, clientY) {
+      const rect = controlStage.getBoundingClientRect();
+      const x = ((clientX - rect.left) / rect.width) * 100;
+      const y = ((clientY - rect.top) / rect.height) * 100;
+      const clampedX = Math.max(8, Math.min(92, x));
+      const clampedY = Math.max(10, Math.min(90, y));
+      node.dataset.x = String(clampedX);
+      node.dataset.y = String(clampedY);
+      node.style.left = `${clampedX}%`;
+      node.style.top = `${clampedY}%`;
+    }
+
+    function beginDrag(event) {
+      if (!editMode) {
+        return;
+      }
+      const node = event.currentTarget;
+      dragState = { node };
+      node.classList.add("dragging");
+      node.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    }
+
+    function moveDrag(event) {
+      if (!dragState || event.currentTarget !== dragState.node) {
+        return;
+      }
+      updateNodePosition(dragState.node, event.clientX, event.clientY);
+    }
+
+    function endDrag(event) {
+      if (!dragState || event.currentTarget !== dragState.node) {
+        return;
+      }
+      dragState.node.classList.remove("dragging");
+      try {
+        dragState.node.releasePointerCapture(event.pointerId);
+      } catch (_) {}
+      persistLayout(currentLayout());
+      layoutNotice.textContent = "Layout saved";
+      dragState = null;
+    }
+
+    async function fetchJson(url, options = {}) {
+      const controller = options.controller || new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      try {
+        const traceId = `${Date.now().toString(36)}-${(++requestTraceSeq).toString(36)}`;
+        const headers = new Headers(options.headers || {});
+        headers.set("X-D810-Client", "ui-flat");
+        headers.set("X-D810-Trace", traceId);
+        headers.set("X-D810-Event", url.includes("/action") ? "action" : url.includes("/status") ? "status" : url.includes("/session-manager") ? "boot" : "json");
+        headers.set("X-D810-Url", url);
+        if (options.uiAt != null) {
+          headers.set("X-D810-Ui-At", String(options.uiAt));
+        }
+        if (options.uiStage) {
+          headers.set("X-D810-Ui-Stage", String(options.uiStage));
+        }
+        if (options.uiAction) {
+          headers.set("X-D810-Ui-Action", String(options.uiAction));
+        }
+        const requestOptions = { ...options, cache: "no-store", signal: controller.signal, headers };
+        delete requestOptions.controller;
+        const response = await fetch(url, requestOptions);
+        const raw = await response.text();
+        const data = JSON.parse(raw);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return data;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function revokeLiveFrameObjectUrl() {
+      if (!liveFrameObjectUrl) {
+        return;
+      }
+      URL.revokeObjectURL(liveFrameObjectUrl);
+      liveFrameObjectUrl = "";
+    }
+
+    async function loadFrameImage(url) {
+      const traceId = `${Date.now().toString(36)}-${(++requestTraceSeq).toString(36)}`;
+      const response = await fetch(url, {
+        cache: "no-store",
+        headers: {
+          "X-D810-Client": "ui-flat",
+          "X-D810-Trace": traceId,
+          "X-D810-Event": "liveview",
+          "X-D810-Url": url,
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`frame_http_${response.status}`);
+      }
+      const blob = await response.blob();
+      if (!blob || !blob.size) {
+        throw new Error("frame_empty");
+      }
+      if (blob.type && blob.type !== "image/jpeg") {
+        throw new Error(`frame_type_${blob.type}`);
+      }
+      const objectUrl = URL.createObjectURL(blob);
+      return new Promise((resolve, reject) => {
+        const previousUrl = liveFrameObjectUrl;
+        const onLoad = () => {
+          liveFrame.removeEventListener("load", onLoad);
+          liveFrame.removeEventListener("error", onError);
+          liveFrameObjectUrl = objectUrl;
+          if (previousUrl) {
+            URL.revokeObjectURL(previousUrl);
+          }
+          resolve(objectUrl);
+        };
+        const onError = () => {
+          liveFrame.removeEventListener("load", onLoad);
+          liveFrame.removeEventListener("error", onError);
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error("frame_load_failed"));
+        };
+        liveFrame.addEventListener("load", onLoad, { once: true });
+        liveFrame.addEventListener("error", onError, { once: true });
+        liveFrame.src = objectUrl;
+      });
+    }
+
+    function closeLiveSocket() {
+      liveSocketMeta = null;
+      liveSocket = null;
+    }
+
+    function scheduleLiveFrame(delayMs) {
+      if (!liveMode) {
+        return;
+      }
+      if (liveLoopTimer) {
+        clearTimeout(liveLoopTimer);
+      }
+      liveLoopTimer = setTimeout(() => {
+        liveLoopTimer = null;
+        if (liveMode && !actionInFlight) {
+          void refreshFrame({ live: true, previewLabel: "live" });
+        }
+      }, Math.max(0, Number(delayMs) || 0));
+    }
+
+    function pauseLiveFrameLoop() {
+      currentFrameSeq += 1;
+      if (liveLoopTimer) {
+        clearTimeout(liveLoopTimer);
+        liveLoopTimer = null;
+      }
+    }
+
+    function setPressedNode(node) {
+      if (activeControlNode && activeControlNode !== node) {
+        activeControlNode.classList.remove("pressed");
+      }
+      activeControlNode = node || null;
+      if (activeControlNode) {
+        activeControlNode.classList.add("pressed");
+      }
+    }
+
+    function clearPressedNode(node = null) {
+      if (node) {
+        node.classList.remove("pressed");
+        if (activeControlNode === node) {
+          activeControlNode = null;
+        }
+        return;
+      }
+      if (activeControlNode) {
+        activeControlNode.classList.remove("pressed");
+        activeControlNode = null;
+      }
+    }
+
+    function setBusyActionNode(node) {
+      for (const controlNode of controlNodes) {
+        controlNode.classList.toggle("busy", controlNode === node);
+        controlNode.classList.toggle("cooldown", !!node && controlNode !== node);
+      }
+    }
+
+    function clearBusyActionNode() {
+      for (const controlNode of controlNodes) {
+        controlNode.classList.remove("busy", "cooldown");
+      }
+    }
+
+    async function refreshFrame(options = {}) {
+      if (frameFetchInFlight) {
+        return false;
+      }
+      const seq = ++currentFrameSeq;
+      const requestedAt = performance.now();
+      const previewLabel = options.previewLabel || (options.live ? "live" : "manual");
+      previewState.textContent = options.live ? "live" : "manual";
+      previewMode.textContent = previewLabel;
+      statusSource.textContent = "bridge /cgi-bin/liveview";
+      frameFetchInFlight = true;
+      try {
+        const frameUrl = `${API.liveview}?ts=${Date.now()}`;
+        await loadFrameImage(frameUrl);
+        const renderedAt = performance.now();
+        if (seq !== currentFrameSeq) {
+          return;
+        }
+        currentLiveFps = pushWindowSample(liveFrameTimes, renderedAt, LIVE_STATS_WINDOW_MS);
+        currentAvgLatencyMs = pushLatencySample(liveLatencySamples, renderedAt, renderedAt - requestedAt, LIVE_STATS_WINDOW_MS);
+        updateLiveMetrics();
+        frameType.textContent = options.live ? "image/jpeg (direct live)" : "image/jpeg";
+        previewMode.textContent = previewLabel;
+        previewState.textContent = options.live ? "live" : "manual";
+        applySessionPhaseProgressive("Ready", options.live ? "The latest live frame arrived" : "The latest frame is ready", { force: true, allowAfterLock: true });
+        stampTime();
+        if (options.live || liveMode) {
+          scheduleLiveFrame(LIVE_FRAME_DELAY_MS);
+        }
+        return true;
+      } catch (error) {
+        if (liveMode || options.live) {
+          applySessionPhaseProgressive("Preparing", "Recovering the frame stream", { force: true, allowAfterLock: true });
+          setAction(String(error.message || error));
+          scheduleLiveFrame(LIVE_RETRY_DELAY_MS);
+        } else {
+          applyCameraPhaseProgressive("Detecting", "Reconnecting to the frame source", { force: true });
+          setAction(String(error.message || error));
+        }
+        return false;
+      } finally {
+        frameFetchInFlight = false;
+      }
+    }
+
+    async function runShotPreview() {
+      try {
+        const response = await fetch(`${API.capturedPreview}?t=${Date.now()}`, {
+          cache: "no-store",
+          headers: {
+            "X-D810-Client": "ui-flat",
+            "X-D810-Event": "captured-preview",
+          },
+        });
+        if (!response.ok) {
+          throw new Error(`captured_preview_${response.status}`);
+        }
+        const blob = await response.blob();
+        if (!blob || !blob.size) {
+          throw new Error("captured_preview_empty");
+        }
+        await storeShotPreview(blob);
+        shellStatus("Shot preview", "Latest frame refreshed");
+        setAction("shot preview ready");
+      } catch (error) {
+        shellStatus("Shot preview", "Could not refresh the frame");
+        setAction(String(error.message || error));
+      }
+    }
+
+    async function refreshStatus() {
+      try {
+        const data = await fetchJson(API.status);
+        if (typeof data.batteryPercent === "number") {
+          setBatteryLevel(data.batteryPercent);
+        } else if (typeof data.batteryLevel === "number") {
+          setBatteryLevel(data.batteryLevel);
+        }
+        const cameraPhase = (typeof data.cameraPhase === "string" && data.cameraPhase)
+          ? { phase: data.cameraPhase, detail: String(data.cameraDetail || "") }
+          : deriveCameraPhase(data, { live: liveMode || data.liveView });
+        const sessionPhase = (typeof data.sessionPhase === "string" && data.sessionPhase)
+          ? { phase: data.sessionPhase, detail: String(data.sessionDetail || "") }
+          : deriveSessionPhase(data, { live: liveMode || data.liveView });
+        const backendState = String(data.backendState || "");
+        const softwareReady = data.softwareReady === true
+          || data.status === "ready"
+          || data.status === "liveview_on";
+        const identity = formatSessionIdentity(data);
+        applyCameraPhaseProgressive(cameraPhase.phase, cameraPhase.detail);
+        if (identity) {
+          setSessionIdentity(identity);
+        }
+        if (!startupPhaseLocked) {
+          if ((softwareReady || sessionPhase.phase === "Ready") && backendState !== "recovering" && backendState !== "degraded") {
+            applySessionPhaseProgressive("Ready", sessionPhase.detail || "Live view and commands are ready right away", { force: true });
+            startupPhaseLocked = true;
+          } else if (liveMode || data.liveView) {
+            if (backendState === "recovering" || backendState === "degraded" || sessionPhase.phase !== "Ready") {
+              applySessionPhaseProgressive(sessionPhase.phase, sessionPhase.detail, { force: true });
+            } else {
+              applySessionPhaseProgressive("Ready", sessionPhase.detail || "Live view and commands are ready right away", { force: true });
+              startupPhaseLocked = true;
+            }
+          } else {
+            applyCameraPhaseProgressive(cameraPhase.phase, cameraPhase.detail);
+            applySessionPhaseProgressive(sessionPhase.phase, sessionPhase.detail);
+          }
+        }
+        previewState.textContent = data.liveView || liveMode ? "live" : "manual";
+      } catch (error) {
+        if (!startupPhaseLocked) {
+          applyCameraPhaseProgressive(liveMode ? "Connect" : "Detecting", liveMode ? "Checking live status" : "Checking service status", { force: true });
+          applySessionPhaseProgressive("Preparing", liveMode ? "Checking live status" : "Checking service status", { force: true });
+        }
+        setAction(String(error.message || error));
+      }
+    }
+
+    function statusRefreshDelay() {
+      if (currentSessionPhase === "Ready") {
+        return STATUS_REFRESH_INTERVAL_MS;
+      }
+      return TRANSIENT_STATUS_REFRESH_INTERVAL_MS;
+    }
+
+    function scheduleStatusRefresh() {
+      if (statusRefreshTimer) {
+        clearTimeout(statusRefreshTimer);
+      }
+      const tick = async () => {
+        if (!document.hidden && !actionInFlight) {
+          await refreshStatus();
+        }
+        statusRefreshTimer = setTimeout(tick, statusRefreshDelay());
+      };
+      statusRefreshTimer = setTimeout(tick, statusRefreshDelay());
+    }
+
+    function stopLiveLoop() {
+      liveMode = false;
+      if (liveLoopTimer) {
+        clearTimeout(liveLoopTimer);
+        liveLoopTimer = null;
+      }
+      previewMode.textContent = "idle";
+      previewState.textContent = "manual";
+      resetLiveMetrics();
+      applySessionPhaseProgressive("Ready", "Live view stopped and the camera is back in standby", { force: true, allowAfterLock: true });
+    }
+
+    async function ensureLiveviewOn() {
+      const payload = await fetchJson(`${API.action}?action=live-on`);
+      if (!payload.ok && payload.status !== "liveview_on") {
+        throw new Error(payload.status || "liveview_on_failed");
+      }
+      return payload;
+    }
+
+    async function startLiveLoop() {
+      liveMode = true;
+      previewMode.textContent = "live";
+      previewState.textContent = "live";
+      resetLiveMetrics();
+      applySessionPhaseProgressive("Preparing", "Starting the live session", { force: true, allowAfterLock: true });
+      try {
+        await ensureLiveviewOn();
+        if (LIVE_INITIAL_DELAY_MS > 0) {
+          await new Promise((resolve) => setTimeout(resolve, LIVE_INITIAL_DELAY_MS));
+        }
+        await refreshFrame({ live: true, previewLabel: "live" });
+        applySessionPhaseProgressive("Ready", "Live session is ready", { force: true, allowAfterLock: true });
+        return true;
+      } catch (error) {
+        stopLiveLoop();
+        setAction(`live start failed: ${String(error.message || error)}`);
+        return false;
+      }
+    }
+
+    async function runAction(action, node = null) {
+      if (editMode) {
+        return;
+      }
+      if (actionInFlight) {
+        setAction(`busy: ${action}`);
+        return;
+      }
+      const uiAt = Date.now();
+      actionInFlight = true;
+      currentActionController = new AbortController();
+      applySessionPhaseProgressive("Preparing", "Processing command", { force: true, allowAfterLock: true });
+      actionStartedAt = performance.now();
+      setBusyActionNode(node);
+      if (action === "live-on") {
+        setAction("Starting live preview");
+        try {
+          if (await startLiveLoop()) {
+            setAction(actionMessages[action]);
+          }
+        } finally {
+          clearBusyActionNode();
+          actionInFlight = false;
+          currentActionController = null;
+        }
+        return;
+      }
+      if (action === "live-off") {
+        pauseLiveFrameLoop();
+        try {
+          await fetchJson(`${API.action}?action=live-off`);
+        } catch (_) {}
+        stopLiveLoop();
+        setAction(actionMessages[action]);
+        clearBusyActionNode();
+        actionInFlight = false;
+        currentActionController = null;
+        return;
+      }
+      const shouldStopLive = action !== "live-on" && action !== "live-off" && action !== "reset" && liveMode;
+      if (shouldStopLive) {
+        pauseLiveFrameLoop();
+        stopLiveLoop();
+      }
+      shellStatus("Sending command", actionMessages[action] || action);
+      try {
+        const payload = await fetchJson(`${API.action}?action=${encodeURIComponent(action)}`, {
+          controller: currentActionController,
+          uiAt,
+          uiStage: "action-request",
+          uiAction: action,
+        });
+        if (!payload.ok && payload.status === "camera_busy") {
+          shellStatus("Camera busy", "Wait a moment and try again");
+          setAction(`${action}: camera_busy`);
+          applySessionPhaseProgressive("Preparing", payload.sessionCondition || "Preparing", { force: true, allowAfterLock: true });
+          startupPhaseLocked = false;
+          await refreshStatus();
+          return;
+        }
+        if (payload.status === "camera_missing") {
+          setAction(`${action}: camera_missing`);
+          applySessionPhaseProgressive("Preparing", payload.sessionCondition || "Preparing", { force: true, allowAfterLock: true });
+          startupPhaseLocked = false;
+          await refreshStatus();
+          return;
+        }
+        if (payload.status === "unknown") {
+          throw new Error(`unknown action: ${action}`);
+        }
+        if (typeof payload.batteryPercent === "number") {
+          setBatteryLevel(payload.batteryPercent);
+        }
+        applySessionPhaseProgressive("Ready", payload.sessionCondition || "Ready", { force: true, allowAfterLock: true });
+        const elapsed = Math.max(0, Math.round(performance.now() - actionStartedAt));
+        setAction(`${payload.action || action}: ${payload.status || "ok"} (${elapsed}ms)`);
+        startupPhaseLocked = false;
+        if (action === "shutter") {
+          previewMode.textContent = "shot";
+          shellStatus("Shot complete", "Refreshing the preview after capture");
+          void runShotPreview();
+        }
+        await refreshStatus();
+      } catch (error) {
+        shellStatus("Command failed", "Rechecking the current state");
+        setAction(`${action} failed: ${String(error.message || error)}`);
+        startupPhaseLocked = false;
+        await refreshStatus();
+      } finally {
+        clearBusyActionNode();
+        actionInFlight = false;
+        currentActionController = null;
+      }
+    }
+
+    async function killCurrentCommand(node = null) {
+      if (editMode || !node) {
+        return;
+      }
+      if (currentActionController) {
+        currentActionController.abort();
+      }
+      setBusyActionNode(node);
+      pauseLiveFrameLoop();
+      liveMode = false;
+      stopLiveLoop();
+      previewMode.textContent = "idle";
+      previewState.textContent = "manual";
+      shellStatus("Stopping command", "Restarting the bridge stack");
+      setAction("killing current command");
+      try {
+        actionInFlight = false;
+        await fetchJson(`${API.action}?action=reset`);
+        applySessionPhaseProgressive("Preparing", "Restarting after a command kill", { force: true, allowAfterLock: true });
+        startupPhaseLocked = false;
+        await refreshStatus();
+        setAction(actionMessages.reset);
+      } catch (error) {
+        setAction(`reset failed: ${String(error.message || error)}`);
+        startupPhaseLocked = false;
+        await refreshStatus();
+      } finally {
+        currentActionController = null;
+        clearBusyActionNode();
+        actionInFlight = false;
+      }
+    }
+
+    async function traceNodeEvent(node, stage) {
+      if (!node || editMode) {
+        return;
+      }
+      const uiAt = Date.now();
+      await fetchJson(`${API.action}?action=trace&target=${encodeURIComponent(node.dataset.action || "")}&stage=${encodeURIComponent(stage)}`, {
+        uiAt,
+        uiStage: stage,
+        uiAction: node.dataset.action || "",
+      }).catch(() => null);
+    }
+
+    for (const node of controlNodes) {
+      node.addEventListener("pointerdown", beginDrag);
+      node.addEventListener("pointermove", moveDrag);
+      node.addEventListener("pointerup", endDrag);
+      node.addEventListener("pointercancel", endDrag);
+      node.addEventListener("pointerdown", async (event) => {
+        if (editMode) {
+          return;
+        }
+        node.dataset.lastActionAt = String(Date.now());
+        if (node.dataset.action === "reset") {
+          event.preventDefault();
+          activePointerId = event.pointerId;
+          setPressedNode(node);
+          shellStatus("Kill command armed", "Restarting the stack");
+          setAction("sending reset");
+          await killCurrentCommand(node);
+          return;
+        }
+        if (actionInFlight) {
+          event.preventDefault();
+          setAction(`busy: ${node.dataset.action}`);
+          return;
+        }
+        activePointerId = event.pointerId;
+        setPressedNode(node);
+        shellStatus("Command armed", actionMessages[node.dataset.action] || node.dataset.action);
+        setAction(`sending ${node.dataset.action}`);
+        event.preventDefault();
+        void traceNodeEvent(node, "pointerdown");
+        await runAction(node.dataset.action, node);
+      });
+      node.addEventListener("pointerup", (event) => {
+        if (editMode) {
+          return;
+        }
+        if (activePointerId === event.pointerId) {
+          activePointerId = null;
+        }
+        clearPressedNode(node);
+      });
+      node.addEventListener("pointercancel", (event) => {
+        if (editMode) {
+          return;
+        }
+        if (activePointerId === event.pointerId) {
+          activePointerId = null;
+        }
+        clearPressedNode(node);
+      });
+      node.addEventListener("click", (event) => {
+        if (editMode) {
+          event.preventDefault();
+          return;
+        }
+        const lastActionAt = Number(node.dataset.lastActionAt || 0);
+        if (Number.isFinite(lastActionAt) && (Date.now() - lastActionAt) < 600) {
+          event.preventDefault();
+          return;
+        }
+        node.dataset.lastActionAt = String(Date.now());
+        setPressedNode(node);
+        shellStatus("Command armed", actionMessages[node.dataset.action] || node.dataset.action);
+        setAction(`sending ${node.dataset.action}`);
+        event.preventDefault();
+        void traceNodeEvent(node, "click");
+        void runAction(node.dataset.action, node);
+      });
+    }
+
+    toggleEdit.addEventListener("click", () => setEditMode(!editMode));
+    saveLayout.addEventListener("click", () => {
+      persistLayout(currentLayout());
+      layoutNotice.textContent = "Layout saved";
+      shellStatus("Layout saved", "Your button map will stay here");
+    });
+    shotThumbImage.addEventListener("click", () => {
+      if (shotThumbImage.hidden || !shotThumbImage.src) {
+        return;
+      }
+      if (shotViewer.hidden) {
+        showShotViewer();
+      } else {
+        hideShotViewer();
+      }
+    });
+    shotViewer.addEventListener("click", (event) => {
+      if (event.target === shotViewer || event.target === shotViewerImage) {
+        hideShotViewer();
+      }
+    });
+    shotViewerClose.addEventListener("click", hideShotViewer);
+
+    window.addEventListener("error", (event) => {
+      shellStatus("UI error", "An unexpected error happened");
+      setAction(event.message || "runtime error");
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      shellStatus("UI error", "Promise rejected");
+      setAction(String(event.reason?.message || event.reason || "promise rejected"));
+    });
+    window.addEventListener("focus", () => {
+      void refreshStatus();
+    });
+    window.addEventListener("pageshow", () => {
+      void refreshStatus();
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        void refreshStatus();
+      }
+    });
+
+    applyLayout(loadLayout());
+    clearVolatileInspectionState();
+    drawPlaceholder();
+    setAction("Booting the UI, please wait");
+    stampTime();
+    setSessionIdentity("---");
+    applyCameraPhaseProgressive("Detecting", "Checking whether the camera is attached", { force: true });
+    applySessionPhaseProgressive("Preparing", "Checking whether the session is ready", { force: true });
+    (async () => {
+      await fetchJson(`/cgi-bin/session-manager?boot=${BOOT_TOKEN}`).catch(() => null);
+      await refreshStatus();
+      stampTime();
+    })();
+    scheduleStatusRefresh();
+  </script>
+</body>
+</html>

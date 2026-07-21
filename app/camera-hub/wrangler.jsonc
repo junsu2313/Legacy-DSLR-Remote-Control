@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "underlab-camera-hub",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-01",
+  "r2_buckets": [
+    {
+      "binding": "CAMERA_BUCKET",
+      "bucket_name": "wirelesscamera"
+    }
+  ],
+  "vars": {
+    "CAMERA_PREFIX": "d810"
+  }
+}

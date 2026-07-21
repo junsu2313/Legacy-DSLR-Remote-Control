@@ -1,0 +1,212 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+SCRIPT_DIR=$(dirname "$0")
+case "$SCRIPT_DIR" in
+  /*) ;;
+  *) SCRIPT_DIR=/www/cgi-bin ;;
+esac
+. "$SCRIPT_DIR/variant-v21-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+
+printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+
+SESSION_LOG_ROOT=${SESSION_LOG_ROOT:-/root/d810-sessions}
+SESSION_SEQ_FILE=${SESSION_SEQ_FILE:-"$SESSION_LOG_ROOT/session.seq"}
+SESSION_SEQ_LOCK=${SESSION_SEQ_LOCK:-"$SESSION_LOG_ROOT/session.seq.lock"}
+SESSION_REPAIR_REQUEST=${SESSION_REPAIR_REQUEST:-/tmp/d810-session.repair}
+SESSION_REPAIR_PIDFILE=${SESSION_REPAIR_PIDFILE:-/tmp/d810-session-repair.pid}
+SESSION_LIVE_REQUEST=${SESSION_LIVE_REQUEST:-/tmp/d810-session.live}
+LIVE_SESSION_STATE=${D810D_LIVE_SESSION_PATH:-/tmp/d810-live-v21.session}
+SESSION_BOOT_LOCK=${D810D_SESSION_BOOT_LOCK:-/tmp/d810-session-manager.boot.lock}
+SESSION_BOOT_LOCK_TIMEOUT=${D810D_SESSION_BOOT_LOCK_TIMEOUT:-30}
+SESSION_BOOT_LOCK_STALE_MS=${D810D_SESSION_BOOT_LOCK_STALE_MS:-60000}
+HARD_RESET_REQUEST=0
+case "${QUERY_STRING:-}" in
+  *reset=1*) HARD_RESET_REQUEST=1 ;;
+esac
+PRESERVE_LIVE=0
+
+release_boot_lock() {
+  rm -f "$SESSION_BOOT_LOCK/pid" 2>/dev/null || true
+  rm -f "$SESSION_BOOT_LOCK/started" 2>/dev/null || true
+  rmdir "$SESSION_BOOT_LOCK" 2>/dev/null || true
+}
+
+acquire_boot_lock() {
+  attempts=0
+  while [ "$attempts" -lt "$SESSION_BOOT_LOCK_TIMEOUT" ]; do
+    if mkdir "$SESSION_BOOT_LOCK" 2>/dev/null; then
+      printf '%s\n' "$$" > "$SESSION_BOOT_LOCK/pid"
+      printf '%s\n' "$(now_ms)" > "$SESSION_BOOT_LOCK/started"
+      trap 'release_boot_lock' EXIT INT TERM
+      return 0
+    fi
+    owner=$(cat "$SESSION_BOOT_LOCK/pid" 2>/dev/null || true)
+    started=$(cat "$SESSION_BOOT_LOCK/started" 2>/dev/null || true)
+    if [ -z "$started" ] || [ $(( $(now_ms) - ${started:-0} )) -gt "$SESSION_BOOT_LOCK_STALE_MS" ]; then
+      release_boot_lock
+      continue
+    fi
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+      release_boot_lock
+      continue
+    fi
+    sleep 1
+    attempts=$((attempts + 1))
+  done
+  return 1
+}
+
+session_label_from_number() {
+  number=$1
+  printf '%03d_session' "${number:-0}"
+}
+
+session_dir_from_number() {
+  number=$1
+  printf '%s/%s' "$SESSION_LOG_ROOT" "$(session_label_from_number "$number")"
+}
+
+allocate_session_id() {
+  seq_file=$1
+  lock_dir=$2
+  next_id=1
+  if mkdir "$lock_dir" 2>/dev/null; then
+    trap 'rmdir "$lock_dir" 2>/dev/null || true' EXIT INT TERM
+    if [ -r "$seq_file" ]; then
+      last_id=$(cat "$seq_file" 2>/dev/null)
+      case $last_id in
+        ''|*[!0-9]*) last_id=0 ;;
+      esac
+      next_id=$((last_id + 1))
+    fi
+    printf '%s\n' "$next_id" > "$seq_file"
+    trap - EXIT INT TERM
+    rmdir "$lock_dir" 2>/dev/null || true
+    printf '%s\n' "$next_id"
+    return 0
+  fi
+  return 1
+}
+
+session_log() {
+  message=$1
+  if [ -n "$SESSION_LOG_FILE" ]; then
+    printf '[session-manager][%s] %s\n' "$SESSION_LABEL" "$message" >> "$SESSION_LOG_FILE"
+  fi
+}
+
+if ! acquire_boot_lock; then
+  printf '{"ok":false,"status":"boot_busy","cameraDetected":false,"bridgeStarted":false,"workersStarted":false}\n'
+  exit 0
+fi
+
+if [ "$HARD_RESET_REQUEST" -eq 0 ] && { [ -f "$SESSION_LIVE_REQUEST" ] || [ -f "$LIVE_SESSION_STATE" ]; }; then
+  PRESERVE_LIVE=1
+fi
+
+SESSION_NUMBER=$(allocate_session_id "$SESSION_SEQ_FILE" "$SESSION_SEQ_LOCK")
+trap 'release_boot_lock' EXIT INT TERM
+if [ -z "$SESSION_NUMBER" ]; then
+  SESSION_NUMBER=1
+fi
+SESSION_LABEL=$(session_label_from_number "$SESSION_NUMBER")
+SESSION_DIR=$(session_dir_from_number "$SESSION_NUMBER")
+SESSION_LOG_FILE="$SESSION_DIR/bridge.log"
+mkdir -p "$SESSION_LOG_ROOT" "$SESSION_DIR"
+touch "$SESSION_LOG_FILE"
+export D810D_SESSION_ID="$SESSION_NUMBER"
+export D810D_SESSION_LABEL="$SESSION_LABEL"
+export D810D_SESSION_DIR="$SESSION_DIR"
+export D810D_DEBUG_LOG="$SESSION_LOG_FILE"
+export BRIDGE_LOG="$SESSION_LOG_FILE"
+export WS_LOG="$SESSION_DIR/ws.log"
+
+session_log "allocated session directory"
+
+if [ "$HARD_RESET_REQUEST" -eq 1 ]; then
+  session_log "new browser session requested; clearing prior live session"
+  PRESERVE_LIVE=0
+  rm -f "$SESSION_LIVE_REQUEST" "$SESSION_REPAIR_REQUEST"
+  /bin/sh "$SCRIPT_DIR/frame-refresh-v21" stop >/dev/null 2>&1 || true
+  ws_stop >/dev/null 2>&1 || true
+  battery_worker_stop >/dev/null 2>&1 || true
+  session_health_stop >/dev/null 2>&1 || true
+  stack_guardian_stop >/dev/null 2>&1 || true
+  runtime_guardian_stop >/dev/null 2>&1 || true
+  bridge_stop >/dev/null 2>&1 || true
+  purge_runtime_tmp
+fi
+
+if bridge_alive; then
+  session_log "healthy bridge already running; reusing runtime"
+  if [ "$PRESERVE_LIVE" -eq 1 ]; then
+    bridge_request "RELOAD_SESSION $SESSION_NUMBER" >/dev/null 2>&1 || true
+  fi
+  status_out=$(bridge_request BOOT)
+  case "$status_out" in
+    *'"ok":true'*)
+      ws_start >/dev/null 2>&1 || true
+      battery_worker_start >/dev/null 2>&1 || true
+      runtime_guardian_start >/dev/null 2>&1 || true
+      printf '%s\n' "$status_out"
+      exit 0
+      ;;
+  esac
+  session_log "existing bridge status invalid; rebuilding runtime"
+fi
+
+LIVE_SESSION_SNAPSHOT=""
+if [ "$PRESERVE_LIVE" -eq 1 ] && [ -f "$LIVE_SESSION_STATE" ]; then
+  LIVE_SESSION_SNAPSHOT=$(cat "$LIVE_SESSION_STATE" 2>/dev/null || true)
+fi
+session_log "purging runtime tmp"
+purge_runtime_tmp
+if [ "$PRESERVE_LIVE" -eq 1 ] && [ -n "$LIVE_SESSION_SNAPSHOT" ]; then
+  printf '%s\n' "$LIVE_SESSION_SNAPSHOT" > "$LIVE_SESSION_STATE"
+else
+  rm -f "$SESSION_LIVE_REQUEST"
+fi
+rm -f "$SESSION_REPAIR_REQUEST"
+session_log "stopping runtime helpers"
+ws_stop >/dev/null 2>&1 || true
+battery_worker_stop >/dev/null 2>&1 || true
+session_health_stop >/dev/null 2>&1 || true
+stack_guardian_stop >/dev/null 2>&1 || true
+runtime_guardian_stop >/dev/null 2>&1 || true
+bridge_stop >/dev/null 2>&1 || true
+
+if ! bridge_only_start; then
+  session_log "bridge unavailable"
+  printf '{"ok":false,"status":"bridge_unavailable","cameraDetected":false,"bridgeStarted":false,"workersStarted":false}\n'
+  exit 0
+fi
+
+session_log "bridge started, connecting session"
+status_out=$(bridge_request BOOT)
+if [ -z "$status_out" ]; then
+  session_log "boot connection failed"
+  printf '{"ok":false,"status":"boot_failed","cameraDetected":false,"bridgeStarted":true,"workersStarted":false}\n'
+  exit 0
+fi
+case "$status_out" in
+  *'"ok":true'*) ;;
+  *)
+    session_log "boot returned an error"
+    printf '{"ok":false,"status":"boot_failed","cameraDetected":false,"bridgeStarted":true,"workersStarted":false}\n'
+    exit 0
+    ;;
+esac
+
+if [ "$PRESERVE_LIVE" -eq 1 ]; then
+  session_log "restoring persistent live session after bridge restart"
+  bridge_request LIVE_START >/dev/null 2>&1 || true
+fi
+
+session_log "starting workers"
+ws_start >/dev/null 2>&1 || true
+battery_worker_start >/dev/null 2>&1 || true
+runtime_guardian_start >/dev/null 2>&1 || true
+
+session_log "session ready"
+printf '%s\n' "$status_out"

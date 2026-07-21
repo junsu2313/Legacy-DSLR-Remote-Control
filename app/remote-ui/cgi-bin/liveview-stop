@@ -1,0 +1,19 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+SCRIPT_DIR=$(dirname "$0")
+. "$SCRIPT_DIR/variant-v21-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+
+if ! bridge_start; then
+  printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+  printf '{"ok":false,"status":"bridge_unavailable"}\n'
+  exit 0
+fi
+
+OUT=$(bridge_request LIVE_STOP)
+if [ -z "$OUT" ]; then
+  OUT='{"ok":false,"status":"bridge_unavailable"}'
+fi
+
+printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+printf '%s\n' "$OUT"

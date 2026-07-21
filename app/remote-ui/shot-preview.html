@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <title>Shot Preview</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg0: #04070c;
+      --bg1: #0c141f;
+      --line: rgba(255, 255, 255, 0.12);
+      --text: #edf4ff;
+      --muted: #91a5c0;
+      --accent: #78e4cc;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: linear-gradient(180deg, var(--bg1), var(--bg0));
+      color: var(--text);
+      font: 500 16px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    .page {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .back-btn {
+      min-height: 38px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .shot-time {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .viewer {
+      display: grid;
+      place-items: center;
+      padding: 12px;
+    }
+
+    .viewer img {
+      width: 100%;
+      max-width: 100%;
+      max-height: calc(100vh - 96px);
+      object-fit: contain;
+      display: block;
+      background: #000;
+      border-radius: 16px;
+    }
+
+    .empty {
+      display: grid;
+      gap: 8px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .empty strong {
+      color: var(--text);
+      font-size: 17px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <button id="backButton" class="back-btn" type="button">Back</button>
+      <div id="shotTime" class="shot-time">No captured preview yet</div>
+    </header>
+
+    <main class="viewer">
+      <img id="shotImage" alt="Captured preview" hidden />
+      <div id="emptyState" class="empty">
+        <strong>No preview</strong>
+        <span>Take a shot from the remote screen first.</span>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const SHOT_PREVIEW_STORAGE_KEY = "d810-shot-preview-dataurl";
+    const SHOT_PREVIEW_AT_KEY = "d810-shot-preview-at";
+    const CAPTURED_PREVIEW_URL = "/cgi-bin/captured-preview";
+
+    const backButton = document.getElementById("backButton");
+    const shotTime = document.getElementById("shotTime");
+    const shotImage = document.getElementById("shotImage");
+    const emptyState = document.getElementById("emptyState");
+
+    function formatShotTime(raw) {
+      const value = Number(raw || 0);
+      if (!value) {
+        return "No captured preview yet";
+      }
+      return new Date(value).toLocaleString("ko-KR", { hour12: false });
+    }
+
+    async function loadShotPreview() {
+      const dataUrl = sessionStorage.getItem(SHOT_PREVIEW_STORAGE_KEY) || "";
+      const capturedAt = sessionStorage.getItem(SHOT_PREVIEW_AT_KEY) || "";
+      shotTime.textContent = formatShotTime(capturedAt);
+      if (!dataUrl) {
+        try {
+          const response = await fetch(`${CAPTURED_PREVIEW_URL}?t=${Date.now()}`, { cache: "no-store" });
+          if (response.ok) {
+            const blob = await response.blob();
+            if (blob && blob.size) {
+              shotImage.src = URL.createObjectURL(blob);
+              shotImage.hidden = false;
+              emptyState.hidden = true;
+              return;
+            }
+          }
+        } catch (_) {}
+        shotImage.hidden = true;
+        emptyState.hidden = false;
+        return;
+      }
+      shotImage.src = dataUrl;
+      shotImage.hidden = false;
+      emptyState.hidden = true;
+    }
+
+    backButton.addEventListener("click", () => {
+      history.back();
+    });
+
+    loadShotPreview();
+  </script>
+</body>
+</html>

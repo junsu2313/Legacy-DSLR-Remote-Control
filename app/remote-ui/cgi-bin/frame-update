@@ -1,0 +1,13 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+SCRIPT_DIR=$(dirname "$0")
+. "$SCRIPT_DIR/bridge-common.sh"
+
+if ! bridge_start; then
+  printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+  printf '{"ok":false,"status":"bridge_unavailable"}\n'
+  exit 0
+fi
+
+printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+printf '{"ok":true,"status":"stream_only","message":"Use websocket stream for live frames"}\n'

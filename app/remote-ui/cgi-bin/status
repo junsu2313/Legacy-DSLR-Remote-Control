@@ -1,0 +1,34 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+SCRIPT_DIR=$(dirname "$0")
+case "$SCRIPT_DIR" in
+  /*) ;;
+  *) SCRIPT_DIR=/www/cgi-bin ;;
+esac
+. "$SCRIPT_DIR/variant-initial-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+
+status_trace_log() {
+  if [ -n "$BRIDGE_LOG" ]; then
+    printf '[status][%s] %s\n' "$(now_ms)" "$1" >> "$BRIDGE_LOG"
+  fi
+}
+
+status_trace_log "received query=${QUERY_STRING:-}"
+status_trace_log "headers trace=${HTTP_X_D810_TRACE:-} event=${HTTP_X_D810_EVENT:-} client=${HTTP_X_D810_CLIENT:-} ui_at=${HTTP_X_D810_UI_AT:-} ui_stage=${HTTP_X_D810_UI_STAGE:-} ui_action=${HTTP_X_D810_UI_ACTION:-}"
+
+if ! bridge_alive; then
+  status_trace_log "bridge unavailable"
+  printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+  printf '{"ok":false,"status":"bridge_unavailable","cameraDetected":false,"liveView":false}\n'
+  exit 0
+fi
+
+OUT=$(bridge_request STATUS)
+status_trace_log "bridge response=${OUT}"
+if [ -z "$OUT" ]; then
+  OUT='{"ok":false,"status":"bridge_unavailable","cameraDetected":false,"liveView":false}'
+fi
+
+printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+printf '%s\n' "$OUT"

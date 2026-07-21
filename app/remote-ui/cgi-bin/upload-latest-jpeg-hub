@@ -1,0 +1,85 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+SCRIPT_DIR=$(dirname "$0")
+. "$SCRIPT_DIR/bridge-common.sh"
+
+OBJECT_PATH=${D810D_CAPTURED_OBJECT_PATH:-/tmp/d810-captured-object.jpg}
+OBJECT_META_PATH=${D810D_CAPTURED_OBJECT_META:-/tmp/d810-captured-object.meta}
+BASE_URL=${CAMERA_HUB_URL:-https://underlab-camera-hub.junsu9080.workers.dev}
+CAMERA_ID=${CAMERA_ID:-d810}
+TOKEN=${CAMERA_UPLOAD_TOKEN:-}
+
+meta_field() {
+  key=$1
+  if [ -r "$OBJECT_META_PATH" ]; then
+    sed -n "s/^$key=//p" "$OBJECT_META_PATH" | head -n 1
+  fi
+}
+
+json_field() {
+  key=$1
+  text=$2
+  printf '%s' "$text" | sed -n "s/.*\"$key\":\"\\([^\"]*\\)\".*/\\1/p" | head -n 1
+}
+
+json_number_field() {
+  key=$1
+  text=$2
+  printf '%s' "$text" | sed -n "s/.*\"$key\":\([0-9][0-9]*\).*/\1/p" | head -n 1
+}
+
+generated_filename() {
+  handle=$(meta_field objectHandle)
+  if [ -n "$handle" ]; then
+    printf 'D810_%s.JPG' "$handle"
+  else
+    printf 'D810_%s.JPG' "$(date -u +%Y%m%dT%H%M%SZ)"
+  fi
+}
+
+emit_json() {
+  body=$1
+  printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n%s\n' "$body"
+}
+
+if ! bridge_start; then
+  emit_json '{"ok":false,"status":"bridge_unavailable"}'
+  exit 1
+fi
+
+OUT=$(bridge_request CAPTURED_OBJECT)
+if ! printf '%s' "$OUT" | grep -q '"ok":true'; then
+  emit_json "$OUT"
+  exit 1
+fi
+
+if [ ! -r "$OBJECT_PATH" ] || [ ! -s "$OBJECT_PATH" ]; then
+  emit_json '{"ok":false,"status":"captured_object_missing"}'
+  exit 1
+fi
+
+FILENAME=$(generated_filename)
+CAPTURED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+AUTH_ARGS=""
+if [ -n "$TOKEN" ]; then
+  AUTH_ARGS="-H Authorization: Bearer $TOKEN"
+fi
+
+RESPONSE=$(curl -sS \
+  -X POST \
+  -H "Content-Type: image/jpeg" \
+  -H "X-File-Name: $FILENAME" \
+  -H "X-Camera-Id: $CAMERA_ID" \
+  -H "X-Captured-At: $CAPTURED_AT" \
+  ${AUTH_ARGS} \
+  --data-binary "@$OBJECT_PATH" \
+  "$BASE_URL/api/camera/upload")
+
+if printf '%s' "$RESPONSE" | grep -q '"ok":true'; then
+  emit_json "$RESPONSE"
+  exit 0
+fi
+
+emit_json "$RESPONSE"
+exit 1
