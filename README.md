@@ -108,7 +108,7 @@ If you want to try this project in practice, show the repository to an AI assist
 
 ## Hackathon Context
 
-This project was prepared for OpenAI Build Week. The project existed before the Hackathon Submission Period, so the repository documents the prior foundation separately from the meaningful extension made during the submission period.
+This project began before OpenAI Build Week. I selected it for Build Week because I wanted to use the event as a focused period to strengthen and extend a project that was already in progress. Build Week is documented here as part of the project's development process, not as its starting point.
 
 The primary hackathon contribution is the post-cutoff optimization and stabilization work: a more responsive live-view pipeline, a much faster captured-image preview path, and continued field reliability work. The primary Codex project thread is recorded in [`docs/hackathon-development-history-2026-07-19.md`](docs/hackathon-development-history-2026-07-19.md).
 
