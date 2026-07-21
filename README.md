@@ -104,7 +104,7 @@ The repository intentionally does not include camera originals, router credentia
 
 If you want to try this project in practice, show the repository to an AI assistant and work through the setup with it. With an AI collaborator, you can explore and enjoy the project step by step.
 
-As the project matures toward a product-ready stage, I plan to package it into a more accessible product. Until then, I hope you will stay interested and follow its progress.
+**This is only the beginning.** As the project matures into a product, I will package it into an accessible and practical experience that more people can install, use, and enjoy. Until then, please stay with the project as it takes its next step—from a working prototype toward a real product.
 
 ## Hackathon Context
 
