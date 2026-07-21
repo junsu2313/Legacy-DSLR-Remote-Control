@@ -8,11 +8,13 @@ This repository is both a working prototype and a record of how a developer and 
 
 The current prototype supports the Nikon D810, with plans to support more cameras and provide additional capabilities over time.
 
-## Why This Project Exists
+## Why This Project Is Needed
 
-Modern mirrorless cameras make wireless remote shooting feel normal. Older DSLR bodies often remain optically and mechanically valuable, but their remote workflows are fragmented, fragile, or tied to desktop software.
+Modern mirrorless cameras include many conveniences that make photography more enjoyable, such as film simulations and wireless photo transfer. Should these conveniences be limited to current products? Can older cameras offer some of the same modern experiences?
 
-This project explores whether a Nikon D810 can be made useful as a modern wireless field camera using a small OpenWrt router, a browser UI, and a purpose-built camera-control stack.
+This project began with those questions: how can modern convenience be brought to older cameras? Starting with the Nikon D810, it explores a wireless field-camera experience built with a small OpenWrt router, a browser UI, and a purpose-built camera-control stack.
+
+**Bringing modern convenience to older cameras.**
 
 ## What Works
 
