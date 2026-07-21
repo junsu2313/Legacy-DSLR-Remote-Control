@@ -340,8 +340,10 @@ local PROP_LIVE_VIEW_STATUS = 0xD1A2
 local PROP_LIVE_VIEW_SELECTOR = 0xD1A6
 local PROP_RECORDING_MEDIA = 0xD10B
 local PROP_BATTERY_LEVEL = 0x5001
+local PROP_IMAGE_SIZE = 0x5003
 local PROP_COMPRESSION_SETTING = 0x5004
-local COMPRESSION_RAW = 4
+local COMPRESSION_RAW_WITH_FINE_JPEG = 7
+local PREVIEW_JPEG_IMAGE_SIZE = "3680x2456"
 local MTP_NOT_LIVE_VIEW = 0xA00B
 local OBJECT_FORMAT_ASSOCIATION = 0x3001
 local OBJECT_FORMAT_UNDEFINED = 0x3000
@@ -375,6 +377,19 @@ local function le_u32(n)
   n = math.floor(n / 256)
   local b4 = n % 256
   return string.char(b1, b2, b3, b4)
+end
+
+local function encode_ptp_string(value)
+  value = tostring(value or "")
+  if value == "" then
+    return string.char(0)
+  end
+  local out = { string.char(#value + 1) }
+  for i = 1, #value do
+    out[#out + 1] = string.char(value:byte(i), 0)
+  end
+  out[#out + 1] = string.char(0, 0)
+  return table.concat(out)
 end
 
 local function u16(s, i)
@@ -1980,6 +1995,48 @@ function DdServerWire:shutter()
   end
   self:ensure_transport_ready(false)
   self:device_ready()
+
+  if self.live_view_active then
+    self:set_device_prop_value(PROP_RECORDING_MEDIA, string.char(0))
+    sleep_ms(100)
+    self:device_ready()
+
+    local capture_ok, capture_result, response_code = pcall(function()
+      return self:execute(NIKON_SHUTTER, { 0xFFFFFFFF, 0x0000 })
+    end)
+
+    if capture_ok and response_code == RESP_OK then
+      for _ = 1, 40 do
+        local ready_response = self:device_ready()
+        if ready_response == RESP_OK then
+          break
+        end
+        if ready_response ~= RESP_DEVICE_BUSY then
+          debug_log(string.format("camera ready after live-view shutter failed 0x%04x", ready_response or 0))
+          break
+        end
+        sleep_ms(150)
+      end
+    end
+
+    local restored, restore_err = pcall(function()
+      self:set_device_prop_value(PROP_RECORDING_MEDIA, string.char(1))
+    end)
+    if not restored then
+      debug_log(string.format("failed to restore live-view recording media: %s", tostring(restore_err)))
+    end
+    if not capture_ok then
+      if type(capture_result) == "table" then
+        error(capture_result, 0)
+      end
+      fail("transport_error", tostring(capture_result or "live-view shutter transport failed"))
+    end
+    if response_code ~= RESP_OK then
+      fail("transport_error", string.format("live-view shutter failed 0x%04x", response_code or 0))
+    end
+    return response_code
+  end
+
   local _, mode_response = self:execute(NIKON_CHANGE_CAMERA_MODE, { 1 })
   if mode_response ~= RESP_OK then
     fail("transport_error", string.format("camera control mode failed 0x%04x", mode_response or 0))
@@ -3245,13 +3302,17 @@ function BridgeSession:raw_mode()
     fail("camera_busy", "camera command lock busy")
   end
   local compression_setting
+  local image_size
   local ok, err = pcall(function()
     local wire = self:_wire()
     wire:device_ready()
-    wire:set_device_prop_value(PROP_COMPRESSION_SETTING, string.char(COMPRESSION_RAW))
+    wire:set_device_prop_value(PROP_COMPRESSION_SETTING, string.char(COMPRESSION_RAW_WITH_FINE_JPEG))
+    wire:set_device_prop_value(PROP_IMAGE_SIZE, encode_ptp_string(PREVIEW_JPEG_IMAGE_SIZE))
     sleep_ms(100)
     local payload = wire:get_device_prop_value(PROP_COMPRESSION_SETTING)
     compression_setting = payload and payload:byte(1) or nil
+    local image_size_payload = wire:get_device_prop_value(PROP_IMAGE_SIZE)
+    image_size = image_size_payload and select(1, read_ptp_string(image_size_payload, 1)) or nil
   end)
   if command_lock then
     release_lock(COMMAND_ACTION_LOCK)
@@ -3259,8 +3320,11 @@ function BridgeSession:raw_mode()
   if not ok then
     error(err, 0)
   end
-  if compression_setting ~= COMPRESSION_RAW then
-    fail("transport_error", "camera did not accept RAW compression setting")
+  if compression_setting ~= COMPRESSION_RAW_WITH_FINE_JPEG then
+    fail("transport_error", "camera did not accept RAW + Fine JPEG compression setting")
+  end
+  if image_size ~= PREVIEW_JPEG_IMAGE_SIZE then
+    fail("transport_error", "camera did not accept 9 MP JPEG image size")
   end
   self.transport_ready = true
   self:record_status_touch()
@@ -3268,6 +3332,7 @@ function BridgeSession:raw_mode()
   self.last_error = ""
   local response = self:_ok("raw_mode", {
     compressionSetting = compression_setting,
+    imageSize = image_size,
   })
   self:save_session_state()
   debug_log("raw mode done")
