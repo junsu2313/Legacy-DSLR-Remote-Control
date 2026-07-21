@@ -28,7 +28,7 @@ This project began with those questions: how can modern convenience be brought t
 - Recovery behavior for degraded session and live-view conditions
 - Captured JPEG preview and full-size image delivery paths
 - Live-view performance: early development approximately 2 FPS → final approximately 20 FPS, with a 26.3 FPS peak
-- Captured-image preview: early development approximately 19–20 seconds → final around 2 seconds
+- Captured-image preview: early development approximately 19–20 seconds → currently approximately 5.2 seconds for a 6.42 MB, 9 MP Fine JPEG
 
 ## System Shape
 
@@ -58,8 +58,9 @@ Mobile or desktop browser UI
 | 2026-06-30 | Preview polling was replaced with a WebSocket live-view path; the first baseline was approximately 2 FPS, with a temporary approximately 15 FPS result after reboot. |
 | 2026-06-30–07-17 | Reliability engineering became the priority: numbered sessions, session logs, live-view session separation, repair units, observation, locks, and regression baselines. |
 | 2026-07-18 | GPT-5.6 Sol was used for the second live-view optimization, reaching approximately 20 FPS operation and a measured 26.3 FPS peak. |
-| 2026-07-19 | GPT-5.6 Sol was used to optimize captured-image preview delivery, reducing observed preview time from approximately 19–20 seconds to around 2 seconds. |
+| 2026-07-19 | GPT-5.6 Sol was used to optimize captured-image preview delivery; the earlier optimized payload reached around 2 seconds. |
 | 2026-07-20 | Tailscale connectivity was verified end-to-end, while Opal RAM usage and service footprint were reduced for field operation. |
+| 2026-07-21 | The current RAW + Fine JPEG path was revalidated at 9 MP: a 6.42 MB JPEG completed end-to-end delivery in approximately 5.2 seconds. |
 
 ## AI-Assisted Development and Developer Responsibility
 

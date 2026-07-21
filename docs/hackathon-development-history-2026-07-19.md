@@ -22,10 +22,11 @@ The project turns a Nikon D810 and a GL.iNet Opal router into a wireless field c
 | 2026-06-30 | First live-view snapshot | Replaced shutter-like preview polling with WebSocket streaming; approximately 2 FPS baseline and a temporary 15 FPS result after reboot | GPT-5.4 / GPT-5.4 mini |
 | 2026-06-30–07-17 | Reliability engineering | Session manager, live-view session separation, numbered session logs, repair/guardian logic, observability, locks, and regression baselines | GPT-5.4 / GPT-5.4 mini |
 | 2026-07-18 | Second live-view optimization | Approximately 20 FPS normal operation and 26.3 FPS peak | GPT-5.6 Sol after 11:40 KST |
-| 2026-07-19 | Captured-image preview optimization | Approximately 19–20 seconds reduced to around 2 seconds through a 9MP preview, chunk tuning, and a single bounded request | GPT-5.6 Sol |
+| 2026-07-19 | Captured-image preview optimization | Earlier optimized payload reduced approximately 19–20 seconds to around 2 seconds; the current 9 MP Fine JPEG path was revalidated at approximately 5.2 seconds | GPT-5.6 Sol |
 | 2026-07-20 | Field connectivity and memory efficiency | Tailscale connectivity verified end-to-end; Opal service footprint and RAM usage reduced | GPT-5.6 Sol |
+| 2026-07-21 | Preview-path revalidation | Current RAW + Fine JPEG configuration produced a 6.42 MB, 9 MP JPEG and completed end-to-end delivery in approximately 5.2 seconds | GPT-5.6 Sol |
 
-The timeline is complete through July 20, with the final-day connectivity and RAM results tied to the corresponding service-optimization records.
+The timeline is complete through July 21, with the current preview measurement tied to an end-to-end transfer from the Opal to the main computer.
 
 ## Phase 0 — Concept and Architecture Sketch
 
@@ -188,7 +189,7 @@ This milestone should be described as a meaningful extension of the existing pro
 
 After live view reached the 20–26.3 FPS range, the next bottleneck was the captured-image preview path. A roughly 30-megapixel-class JPEG took approximately 19–20 seconds to become visible in the Opal-served UI, which made the shooting workflow feel disconnected even though live view was responsive.
 
-GPT-5.6 Sol was then used to optimize the preview loop. The path was changed to use an approximately 9-megapixel preview representation, a measured chunk-size adjustment, and a single bounded request rather than many smaller requests. The observed preview time was reduced from approximately 19–20 seconds to around 2 seconds.
+GPT-5.6 Sol was then used to optimize the preview loop. The path was changed to use an approximately 9-megapixel preview representation and measured chunk-size tuning. An earlier 2.83 MB test payload completed in approximately 2.37–2.72 seconds. On 2026-07-21, the current RAW + Fine JPEG configuration was revalidated with a 6.42 MB, 9 MP JPEG: first byte arrived in approximately 1.51 seconds and end-to-end delivery completed in approximately 5.21 seconds. The current public performance figure is therefore approximately 5.2 seconds, while the earlier 2-second-class result remains recorded as a historical test condition.
 
 This creates a clear two-path product experience:
 
