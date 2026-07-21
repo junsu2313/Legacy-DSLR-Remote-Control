@@ -78,7 +78,6 @@ The value of this project is therefore not that AI wrote everything. The value i
 ## Repository Guide
 
 - `app/remote-ui/` — browser UI, CGI endpoints, bridge, session manager, workers, and recovery units
-- `app/camera-hub/` — JPEG-only Cloudflare Worker/R2 image hub
 - `deploy/openwrt/` — router startup and package integration files
 - `deploy/scripts/` — build, deployment, memory, upload, and contract-test helpers
 - `docs/DSLR_Wireless/` — architecture and reference-implementation analysis
@@ -96,13 +95,6 @@ The current prototype is intentionally D810-focused. It is not yet a general-pur
 ## Running and Testing
 
 The camera platform requires the physical D810, the Opal router, the correct OpenWrt architecture, and the deployed camera-side services. Start with the documents in `docs/` and the scripts in `deploy/scripts/` before changing the active router deployment.
-
-The local image hub can be run separately from `app/camera-hub/`:
-
-```bash
-npm install
-npm run dev
-```
 
 The repository intentionally does not include camera originals, router credentials, local caches, SDK archives, or generated dependency directories.
 
