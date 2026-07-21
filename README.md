@@ -119,3 +119,9 @@ The primary hackathon contribution is the post-cutoff optimization and stabiliza
 - Live-view performance depends on camera, session, router, and network state.
 - The final Tailscale and RAM-optimization measurements are recorded in the project history and service-optimization notes.
 - This is a hackathon-scale working prototype, not a finished commercial product.
+
+## License
+
+Original code in this repository is licensed under the MIT License. See [`LICENSE`](LICENSE).
+
+Third-party code and dependencies remain subject to their respective licenses and notices.
