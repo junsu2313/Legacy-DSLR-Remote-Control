@@ -102,6 +102,8 @@ The camera platform requires the physical D810, the Opal router, the correct Ope
 
 The repository intentionally does not include camera originals, router credentials, local caches, SDK archives, or generated dependency directories.
 
+If you want to try this project in practice, show the repository to an AI assistant and work through the setup with it. With an AI collaborator, you can explore and enjoy the project step by step.
+
 ## Hackathon Context
 
 This project was prepared for OpenAI Build Week. The project existed before the Hackathon Submission Period, so the repository documents the prior foundation separately from the meaningful extension made during the submission period.
