@@ -118,7 +118,7 @@ The primary hackathon contribution is the post-cutoff optimization and stabiliza
 - The system depends on specific OpenWrt router hardware and USB/PTP behavior.
 - Live-view performance depends on camera, session, router, and network state.
 - The final Tailscale and RAM-optimization measurements are recorded in the project history and service-optimization notes.
-- This is a hackathon-scale working prototype, not a finished commercial product.
+- This project is an alpha-stage prototype, not a finished commercial product.
 
 ## License
 
