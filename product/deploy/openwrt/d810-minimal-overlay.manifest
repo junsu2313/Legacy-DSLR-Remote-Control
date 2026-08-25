@@ -1,0 +1,58 @@
+# D810 minimal overlay contract for GL-SFT1200.
+# This is an allow-list for the persistent custom layer. Stock firmware,
+# network, wireless, procd and U-Boot files stay outside this profile.
+
+[required-runtime]
+/www/cgi-bin/diagnose-recover
+/www/cgi-bin/diagnostic-catalog.tsv
+/usr/bin/ddserver
+/etc/d810-ddserver.env
+/www/cgi-bin/action-v21
+/www/cgi-bin/bridge-common.sh
+/www/cgi-bin/project-ddserver-runtime
+/www/cgi-bin/project-runtime-dependencies.sh
+/www/remote-ui/runtime/lua/5.1/nixio.so
+/www/cgi-bin/d810bridge.lua
+/www/cgi-bin/d810d.lua
+/www/cgi-bin/d810ws.lua
+/www/cgi-bin/variant-v21-env.sh
+/www/cgi-bin/session-manager
+/www/cgi-bin/status-v21
+/www/cgi-bin/liveview-v21
+/www/cgi-bin/capture-event
+/www/cgi-bin/captured-object
+/www/cgi-bin/captured-preview
+/www/cgi-bin/captured-nef
+/www/cgi-bin/captured-images
+/www/cgi-bin/captured-thumbnail
+/www/cgi-bin/frame-refresh-v21
+/www/cgi-bin/battery-worker
+/www/cgi-bin/session-health
+/www/cgi-bin/runtime-guardian
+/www/cgi-bin/remote-ui
+
+[optional-runtime]
+/www/remote-ui/0716-landscape-1.1.html
+/www/remote-ui/0716-1.html
+/www/remote-ui/index.html
+
+[persistent-data]
+/root/d810-sessions
+/root/d810-camera-events.log
+/root/d810-diagnostics.log
+/root/d810-field-events.jsonl
+/root/d810-readiness.stats
+
+[forbidden-at-boot]
+# These may exist in the repository for diagnostics, but must not be enabled
+# in the minimal profile because they execute before the camera runtime is
+# proven healthy or add another persistent service to the boot path.
+/etc/init.d/d810-boot-watch
+/etc/init.d/ddserver
+/etc/init.d/d810-usb-host
+/etc/init.d/tailscaled
+/etc/hotplug.d/usb/90-d810-camera-hotplug
+/etc/hotplug.d/iface/95-tailscale-sta-hotplug
+/usr/bin/d810-boot-watch
+/usr/bin/d810-log-checkpoint
+/usr/bin/opal-outbox-enqueue

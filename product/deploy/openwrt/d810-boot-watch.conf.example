@@ -1,0 +1,13 @@
+# Optional device classification. Leave blank to log every associated station.
+# MAC addresses must be lowercase and colon-separated.
+D810_S10_MAC=
+D810_DESKTOP_MAC=
+
+# Persistent timeline location, separate from the camera service logs.
+D810_WATCH_LOG_DIR=/root/d810-watch-logs
+D810_WATCH_STATE=/tmp/d810-boot-watch.state
+D810_WATCH_INTERVAL=1
+D810_WATCH_STATUS_INTERVAL=2
+D810_WATCH_HEARTBEAT_INTERVAL=10
+D810_WATCH_CHECKPOINT_INTERVAL=60
+D810_WATCH_CHECKPOINT_SCRIPT=/usr/bin/d810-log-checkpoint

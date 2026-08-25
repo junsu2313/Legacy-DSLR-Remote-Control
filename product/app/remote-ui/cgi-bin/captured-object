@@ -1,0 +1,55 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+SCRIPT_DIR=$(dirname "$0")
+. "$SCRIPT_DIR/variant-v21-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+FRAME_PATH=${D810D_CAPTURED_OBJECT_PATH:-/tmp/d810-captured-object.jpg}
+META_PATH=${D810D_CAPTURED_OBJECT_META:-/tmp/d810-captured-object.meta}
+LOCK_PATH=${D810D_CAPTURED_OBJECT_LOCK:-/tmp/d810-captured-object-download.lock}
+
+clear_stale_lock() {
+  if [ -d "$LOCK_PATH" ] && [ -r "$LOCK_PATH/started" ]; then
+    now=$(date +%s)
+    started=$(cat "$LOCK_PATH/started" 2>/dev/null || printf 0)
+    [ $((now - started)) -gt 90 ] && rm -rf "$LOCK_PATH"
+  fi
+}
+
+clear_stale_lock
+if ! mkdir "$LOCK_PATH" 2>/dev/null; then
+  printf 'Status: 409 Conflict\r\nContent-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+  printf '{"ok":false,"status":"captured_object_busy"}\n'
+  exit 0
+fi
+date +%s > "$LOCK_PATH/started"
+trap 'rm -rf "$LOCK_PATH"' EXIT
+
+emit_headers() {
+  printf 'Content-Type: image/jpeg\r\nCache-Control: no-store, no-cache, must-revalidate\r\nPragma: no-cache\r\nExpires: 0\r\n\r\n'
+}
+
+HANDLE=$(printf '%s' "${QUERY_STRING:-}" | tr '&' '\n' | sed -n 's/^handle=//p' | head -n 1)
+case "$HANDLE" in
+  ''|*[!0-9]*) HANDLE=0 ;;
+esac
+COMMAND=CAPTURED_OBJECT_JPEG
+[ "$HANDLE" -gt 0 ] 2>/dev/null && COMMAND="CAPTURED_OBJECT_JPEG $HANDLE"
+
+if bridge_start; then
+  printf '%s\n' "$COMMAND" | bridge_netcat 2>>"$BRIDGE_LOG" | {
+    IFS= read -r STREAM_HEADER
+    case "$STREAM_HEADER" in
+      "BINARY "*)
+        STREAM_SIZE=${STREAM_HEADER#BINARY }
+        printf 'Content-Type: image/jpeg\r\nContent-Length: %s\r\nCache-Control: no-store, no-cache, must-revalidate\r\nPragma: no-cache\r\nExpires: 0\r\n\r\n' "$STREAM_SIZE"
+        dd bs=65536 2>/dev/null
+        exit 0
+        ;;
+    esac
+    exit 1
+  }
+  [ "$?" -eq 0 ] && exit 0
+fi
+
+printf 'Status: 404 Not Found\r\nContent-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+printf '{"ok":false,"status":"captured_object_unavailable"}\n'

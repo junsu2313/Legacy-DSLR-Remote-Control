@@ -1,0 +1,58 @@
+# Local workbench and generated state
+.tmp/
+tmp/
+cc/
+librechat/
+compare_*/
+dtcache/
+dtcfg/
+dtlocal/
+dtroaming/
+dttmp/
+snapshots/
+_tmp_*/
+/d810-*
+/d810_*.xml
+/debug_nixio_probe.lua
+/_dcc_*
+/launch_darktable_*
+/list_camera_*
+/opal-*
+/tmp-*
+/*-report.tsv
+/*-monitor.csv
+
+# Camera originals and generated media
+CAMERA/
+*.NEF
+*.nef
+*.JPG
+*.JPEG
+*.jpg
+*.jpeg
+*.tar
+*.tar.xz
+*.ipk
+*.mipsel_24kc
+*.mips_siflower
+openwrt-sdk-*/
+
+# Dependencies and local tool state
+**/node_modules/
+**/.wrangler/
+**/__pycache__/
+**/*.pyc*
+
+# Local credentials and infrastructure notes
+docs/infra-access-2026-07-03.md
+docs/development-planned-feature-1-nxstudio-film-simulation-2026-07-19.md
+docs/니콘_필름_믹스_프로젝트_논의정리.md
+.env
+.env.*
+!.env.example
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,32 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+SCRIPT_DIR=$(dirname "$0")
+. "$SCRIPT_DIR/variant-v21-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+LOCK_PATH=${D810D_CAPTURED_NEF_LOCK:-/tmp/d810-captured-nef-download.lock}
+
+if ! mkdir "$LOCK_PATH" 2>/dev/null; then
+  printf 'Status: 409 Conflict\r\nContent-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+  printf '{"ok":false,"status":"captured_nef_busy"}\n'
+  exit 0
+fi
+trap 'rm -rf "$LOCK_PATH"' EXIT
+
+if bridge_start; then
+  printf '%s\n' CAPTURED_OBJECT_NEF | bridge_netcat 2>>"$BRIDGE_LOG" | {
+    IFS= read -r STREAM_HEADER
+    case "$STREAM_HEADER" in
+      "BINARY "*)
+        STREAM_SIZE=${STREAM_HEADER#BINARY }
+        printf 'Content-Type: image/x-nikon-nef\r\nContent-Length: %s\r\nCache-Control: no-store\r\n\r\n' "$STREAM_SIZE"
+        dd bs=65536 2>/dev/null
+        exit 0
+        ;;
+    esac
+    exit 1
+  }
+  [ "$?" -eq 0 ] && exit 0
+fi
+
+printf 'Status: 404 Not Found\r\nContent-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+printf '{"ok":false,"status":"captured_nef_unavailable"}\n'

@@ -1,0 +1,16 @@
+#!/bin/sh /etc/rc.common
+
+START=97
+STOP=10
+
+USB_ROOT=/sys/bus/usb/devices/usb1/power
+
+start() {
+  [ -w "$USB_ROOT/control" ] && printf '%s\n' on > "$USB_ROOT/control"
+  [ -w "$USB_ROOT/autosuspend" ] && printf '%s\n' -1 > "$USB_ROOT/autosuspend"
+  logger -t d810-usb-host "USB root hub autosuspend disabled"
+}
+
+stop() {
+  return 0
+}

@@ -1,0 +1,104 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+
+SCRIPT_DIR=$(dirname "$0")
+case "$SCRIPT_DIR" in
+  /*) ;;
+  *) SCRIPT_DIR=/www/cgi-bin ;;
+esac
+. "$SCRIPT_DIR/variant-v21-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+
+RUNTIME_GUARDIAN_PIDFILE=${D810D_RUNTIME_GUARDIAN_PIDFILE:-/tmp/d810-runtime-guardian.pid}
+# Runtime checks are a low-frequency safety net. User actions run the
+# action guard immediately before they touch the camera stack.
+RUNTIME_GUARDIAN_INTERVAL=${D810D_RUNTIME_GUARDIAN_INTERVAL:-30}
+DIAGNOSE_SCRIPT=${D810D_DIAGNOSE_SCRIPT:-$SCRIPT_DIR/diagnose-recover}
+
+guardian_log() {
+  printf '[runtime-guardian][%s] %s\n' "$(now_ms)" "$1" >> "$BRIDGE_LOG"
+}
+
+runtime_contract_ready() {
+  contract_payload=$1
+  case "$contract_payload" in *'"appReady":true'*) ;; *) return 1 ;; esac
+  case "$contract_payload" in *'"transportReady":true'*) ;; *) return 1 ;; esac
+  case "$contract_payload" in *'"commandReady":true'*) ;; *) return 1 ;; esac
+  case "$contract_payload" in
+    *'"liveViewReady":true'*|*'"liveViewLimited":true'*) ;;
+    *) return 1 ;;
+  esac
+  return 0
+}
+
+request_diagnosis() {
+  observed_reason=$1
+  guardian_log "role=observer event=diagnosis_requested reason=$observed_reason"
+  diagnosis_out=$(/bin/sh "$DIAGNOSE_SCRIPT" auto 2>>"$BRIDGE_LOG" || true)
+  case "$diagnosis_out" in
+    *'"diagnosisId"'*) guardian_log "role=observer event=diagnosis_completed $diagnosis_out" ;;
+    *) guardian_log "role=observer event=diagnosis_unavailable reason=$observed_reason" ;;
+  esac
+}
+
+write_pid() {
+  printf '%s\n' "$$" > "$RUNTIME_GUARDIAN_PIDFILE"
+}
+
+clear_pid() {
+  owner=$(cat "$RUNTIME_GUARDIAN_PIDFILE" 2>/dev/null || true)
+  [ "$owner" = "$$" ] && rm -f "$RUNTIME_GUARDIAN_PIDFILE"
+}
+
+ensure_runtime() {
+  if ! project_ddserver_ready; then
+    request_diagnosis project_transport_unavailable
+    return 0
+  fi
+  if ! bridge_alive; then
+    request_diagnosis bridge_unavailable
+    return 0
+  fi
+  if ! ws_alive; then
+    request_diagnosis websocket_unavailable
+    return 0
+  fi
+  if ! battery_worker_alive; then
+    request_diagnosis battery_worker_unavailable
+    return 0
+  fi
+  if ! session_health_alive; then
+    request_diagnosis session_health_unavailable
+    return 0
+  fi
+  if project_ddserver_ready && bridge_alive && ws_alive && \
+      battery_worker_alive && session_health_alive; then
+    runtime_status=$(bridge_request_timed STATUS 5 2>/dev/null || true)
+    runtime_contract_ready "$runtime_status" && return 0
+    case "$runtime_status" in
+      *'"liveViewLimited":true'*) return 0 ;;
+      *'"transportReady":false'*) request_diagnosis transport_not_ready ;;
+      *'"commandReady":false'*) request_diagnosis command_not_ready ;;
+      *'"liveViewReady":false'*) request_diagnosis live_view_not_ready ;;
+      *) request_diagnosis readiness_contract_failed ;;
+    esac
+  fi
+}
+
+repair_live() {
+  [ -f "$SESSION_REPAIR_REQUEST" ] || return 0
+  [ -f "$SESSION_LIVE_REQUEST" ] || return 0
+  rm -f "$SESSION_REPAIR_REQUEST"
+  request_diagnosis live_session_repair_requested
+}
+
+write_pid
+trap 'clear_pid' EXIT
+trap 'exit 0' INT TERM HUP
+guardian_log "started"
+
+while true; do
+  ensure_runtime
+  repair_live
+  sleep "$RUNTIME_GUARDIAN_INTERVAL"
+done

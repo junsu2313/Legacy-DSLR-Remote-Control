@@ -1,0 +1,14 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+BRIDGE_HOST=${BRIDGE_HOST:-127.0.0.1}
+BRIDGE_PORT=${BRIDGE_PORT:-8189}
+BRIDGE_LOG=${BRIDGE_LOG:-/tmp/d810-bridge-v21.log}
+NC_BIN=${NC_BIN:-/usr/bin/nc}
+
+OUT=$(printf '%s\n' CAPTURE_EVENTS | "$NC_BIN" "$BRIDGE_HOST" "$BRIDGE_PORT" 2>>"$BRIDGE_LOG")
+if [ -z "$OUT" ]; then
+  OUT='{"ok":false,"status":"bridge_unavailable","captureEvent":false}'
+fi
+
+printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+printf '%s\n' "$OUT"

@@ -1,0 +1,2388 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <link rel="manifest" href="/remote-ui/d810-camera.webmanifest" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <title>D810 Remote App</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg0: #050505;
+      --bg1: #0a0a0a;
+      --bg2: #111111;
+      --line: rgba(255, 255, 255, 0.08);
+      --line-strong: rgba(255, 255, 255, 0.16);
+      --text: #f3f3f3;
+      --muted: #a5a5a5;
+      --accent: #f3f3f3;
+      --gold: #f3f3f3;
+      --danger: #f3f3f3;
+      --preview-h: 36vh;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: linear-gradient(180deg, var(--bg2), var(--bg1) 48%, var(--bg0));
+      color: var(--text);
+      font: 500 16px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 0;
+      padding: 0 0 12px;
+    }
+
+    .topbar {
+      display: none;
+    }
+
+    .preview-card {
+      position: relative;
+      overflow: hidden;
+      min-height: clamp(240px, var(--preview-h), 43vh);
+      background: #000;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .preview-frame {
+      width: 100%;
+      height: clamp(240px, var(--preview-h), 43vh);
+      display: block;
+      background: linear-gradient(135deg, #141414, #090909 42%, #1b1b1b);
+    }
+
+
+    .preview-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: auto;
+      padding: 10px;
+    }
+
+    .overlay-badge {
+      position: absolute;
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      background: rgba(8, 8, 8, 0.62);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: rgba(243, 243, 243, 0.9);
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      backdrop-filter: blur(8px);
+    }
+
+    .overlay-badge strong {
+      font-size: 12px;
+      font-weight: 650;
+      color: #ffffff;
+    }
+
+    .overlay-time {
+      top: 10px;
+      right: 10px;
+    }
+
+    .overlay-camera {
+      left: 10px;
+      bottom: 10px;
+    }
+
+    .shot-preview {
+      position: absolute;
+      right: 10px;
+      bottom: 10px;
+      width: min(25%, 210px);
+      min-width: 96px;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(10, 10, 10, 0.9);
+      box-shadow: 0 12px 26px rgba(0, 0, 0, 0.28);
+      cursor: pointer;
+      z-index: 2;
+    }
+
+    .shot-preview[hidden] {
+      display: none;
+    }
+
+    .shot-viewer {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      display: grid;
+      grid-template-rows: 1fr;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      background: #000;
+    }
+
+    .shot-viewer[hidden] {
+      display: none;
+    }
+
+    .shot-viewer-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 2;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      padding-top: max(10px, env(safe-area-inset-top));
+      color: rgba(243, 243, 243, 0.9);
+      font-size: 12px;
+      background: linear-gradient(to bottom, rgba(0, 0, 0, 0.72), transparent);
+    }
+
+    .shot-viewer-body {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      width: 100%;
+      height: 100%;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .shot-viewer-image {
+      position: static;
+      width: min(96vw, calc(96dvh * 7360 / 4912));
+      height: auto;
+      aspect-ratio: 7360 / 4912;
+      max-width: 96vw;
+      max-height: 96dvh;
+      min-width: 0;
+      min-height: 0;
+      object-fit: contain;
+      border-radius: 0;
+      box-shadow: none;
+      background: #000;
+      cursor: pointer;
+    }
+
+    .control-card {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 0;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px 10px;
+      gap: 10px;
+    }
+
+    .toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .battery-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 30px;
+      padding: 0 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 650;
+      white-space: nowrap;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .battery-pill strong {
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .session-condition {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 24px;
+      margin-top: 6px;
+      padding: 0 10px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      color: rgba(243, 243, 243, 0.82);
+      font-size: 10px;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      background: rgba(255, 255, 255, 0.015);
+    }
+
+    .session-condition strong {
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .session-id {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 24px;
+      margin-top: 6px;
+      margin-left: 8px;
+      padding: 0 10px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      color: rgba(243, 243, 243, 0.78);
+      font-size: 10px;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      background: rgba(255, 255, 255, 0.012);
+    }
+
+    .session-id strong {
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .live-metrics {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-left: 8px;
+      color: rgba(231, 236, 240, 0.78);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .live-metrics strong {
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .small-btn {
+      min-height: 30px;
+      min-width: 30px;
+      padding: 0 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--text);
+      font-weight: 650;
+      font-size: 11px;
+      touch-action: manipulation;
+    }
+
+    .small-btn.primary {
+      color: var(--text);
+      border-color: rgba(255, 255, 255, 0.24);
+    }
+
+    .control-stage {
+      position: relative;
+      min-height: clamp(300px, 42vh, 52vh);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0.005));
+      overflow: hidden;
+    }
+
+    .control-stage.editing {
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+    }
+
+    .control-node {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: var(--size, 80px);
+      height: var(--size, 80px);
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text);
+      background:
+        radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.12), transparent 36%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+      display: grid;
+      place-items: center;
+      text-align: center;
+      cursor: pointer;
+      touch-action: none;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      transition: transform 70ms ease, background 90ms ease, border-color 90ms ease, box-shadow 90ms ease, opacity 90ms ease;
+    }
+
+    .control-node > div {
+      display: grid;
+      gap: 1px;
+    }
+
+    .control-node strong {
+      font-size: 15px;
+      line-height: 1;
+      letter-spacing: 0.02em;
+    }
+
+    .control-node span {
+      color: var(--muted);
+      font-size: 9px;
+      line-height: 1;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .control-node.primary {
+      color: var(--text);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .control-node.accent {
+      color: var(--text);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .control-node.danger {
+      color: var(--text);
+      border-color: rgba(255, 255, 255, 0.16);
+    }
+
+    .control-node.dragging {
+      background: rgba(255, 255, 255, 0.08);
+      z-index: 20;
+    }
+
+    .control-node.pressed {
+      transform: translate(-50%, -50%) scale(0.955);
+      border-color: rgba(255, 255, 255, 0.34);
+      background:
+        radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.18), transparent 38%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015));
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+
+    .control-node.busy {
+      border-color: rgba(255, 255, 255, 0.28);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 10px 22px rgba(0, 0, 0, 0.22);
+    }
+
+    .control-node.cooldown {
+      opacity: 0.56;
+    }
+
+    .control-node.editing {
+      outline: 2px solid rgba(120, 228, 204, 0.32);
+      outline-offset: 4px;
+    }
+
+    .hidden-status {
+      display: none;
+    }
+
+    @media (orientation: landscape) {
+      :root { --preview-h: 30vh; }
+      .app {
+        grid-template-columns: minmax(0, 0.92fr) minmax(320px, 0.88fr);
+        grid-template-rows: auto auto 1fr;
+        grid-template-areas:
+          "top top"
+          "preview controls"
+          "preview controls";
+      }
+
+      .topbar { grid-area: top; }
+
+      .preview-card {
+        grid-area: preview;
+        border-right: 1px solid var(--line);
+        border-bottom: 0;
+      }
+
+      .control-card { grid-area: controls; }
+      .control-stage { min-height: 44vh; }
+    }
+
+    @media (max-width: 520px) {
+      .topbar,
+      .toolbar {
+        padding-left: 10px;
+        padding-right: 10px;
+      }
+
+      .control-node {
+        width: var(--size-mobile, var(--size, 88px));
+        height: var(--size-mobile, var(--size, 88px));
+      }
+
+      .shot-preview {
+        width: min(25%, 150px);
+        min-width: 82px;
+      }
+
+      .overlay-badge {
+        font-size: 10px;
+        padding: 5px 8px;
+      }
+
+      .control-node strong {
+        font-size: 13px;
+      }
+
+      .control-node span {
+        font-size: 8px;
+      }
+    }
+  </style>
+  <style id="landscape-ui-overrides">
+    html, body { width:100%; height:100%; overflow:hidden; background:#000; }
+    body { padding:0; }
+    .app { width:100vw; height:100dvh; min-height:100dvh; display:block; padding:0; }
+    .topbar, .control-card, .hidden-status { display:none !important; }
+    .preview-card { position:fixed; inset:0; width:100vw; height:100dvh; min-height:0; border:0; }
+    .preview-frame { width:100%; height:100%; min-height:0; object-fit:contain; object-position:center; transform:none; background:#000; }
+    .preview-overlay { z-index:4; padding:0; pointer-events:none; }
+    .overlay-badge { pointer-events:none; padding:7px 10px; border-color:rgba(255,255,255,.2); background:rgba(0,0,0,.52); }
+    .overlay-time { top:max(12px, env(safe-area-inset-top)); right:max(12px, env(safe-area-inset-right)); }
+    .overlay-camera { left:max(12px, env(safe-area-inset-left)); bottom:max(12px, env(safe-area-inset-bottom)); }
+    .landscape-exit { position:absolute; top:max(12px, env(safe-area-inset-top)); left:max(12px, env(safe-area-inset-left)); z-index:30; pointer-events:auto; border:1px solid rgba(255,255,255,.22); border-radius:999px; padding:8px 12px; color:#fff; background:rgba(0,0,0,.58); font:600 12px/1 system-ui,sans-serif; backdrop-filter:blur(10px); }
+    .landscape-exit:active { transform:scale(.97); background:rgba(255,255,255,.18); }
+    .landscape-live-controls { position:absolute; left:50%; bottom:max(16px, env(safe-area-inset-bottom)); z-index:6; display:flex; gap:10px; transform:translateX(-50%); pointer-events:auto; }
+    .landscape-live-btn { min-width:88px; min-height:42px; padding:0 14px; border:1px solid rgba(255,255,255,.22); border-radius:999px; color:#fff; background:rgba(0,0,0,.62); font:700 12px/1 system-ui,sans-serif; letter-spacing:.04em; backdrop-filter:blur(10px); }
+    .landscape-live-btn.start { border-color:rgba(120,220,160,.7); }
+    .landscape-live-btn.stop { border-color:rgba(255,120,120,.7); }
+    .landscape-live-btn:active { transform:scale(.97); background:rgba(255,255,255,.18); }
+    .landscape-layout-tools { position:absolute; top:calc(max(12px, env(safe-area-inset-top)) + 38px); right:max(12px, env(safe-area-inset-right)); z-index:7; display:flex; gap:6px; pointer-events:auto; }
+    .landscape-layout-tools button { border:1px solid rgba(255,255,255,.22); border-radius:999px; padding:8px 12px; color:#fff; background:rgba(0,0,0,.58); font:600 12px/1 system-ui,sans-serif; backdrop-filter:blur(10px); }
+    .landscape-layout-tools button[hidden] { display:none; }
+    .landscape-control-stage { position:absolute; inset:0; z-index:5; display:block; pointer-events:none; padding:0; border:1px dashed transparent; border-radius:0; background:transparent; }
+    .landscape-control-stage.editing { border-color:rgba(255,255,255,.35); background:rgba(0,0,0,.08); }
+    .landscape-control-node { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:var(--landscape-size); height:var(--landscape-size); pointer-events:auto; }
+    .landscape-control-node:active { transform:translate(-50%,-50%) scale(.96); }
+    .landscape-control-node.landscape-af11:active { transform:translate(-50%,-50%); }
+    .landscape-control-node strong { font-size:11px; }
+    .landscape-control-node span { font-size:7px; }
+    .landscape-control-node.landscape-af01 { width:70px; height:70px; border:0; background:transparent; box-shadow:none; }
+    .landscape-control-node.landscape-af01::before { content:""; position:absolute; inset:10px; border:1px solid rgba(255,255,255,.82); border-radius:50%; box-shadow:0 0 0 7px rgba(255,255,255,.05),0 0 0 15px rgba(255,255,255,.025); pointer-events:none; }
+    .landscape-control-node.landscape-af01 > div { position:relative; z-index:1; }
+    .landscape-control-node.landscape-af01 span { display:none; }
+    .landscape-control-node.landscape-af11 { width:148px; height:49px; --slide-x:0px; --slide-max:99px; border:1px solid rgba(255,255,255,.34); border-radius:999px; background:linear-gradient(90deg,rgba(255,255,255,.08),rgba(255,255,255,.02)); overflow:hidden; justify-content:flex-start; padding-left:2px; }
+    .landscape-control-node.landscape-af11::before { content:""; position:absolute; left:calc(2px + var(--slide-x, 0px)); top:2px; width:45px; height:45px; border:1px solid rgba(255,255,255,.7); border-radius:50%; background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.2),rgba(255,255,255,.03) 55%); pointer-events:none; transition:left 80ms ease,background 120ms ease; }
+    .landscape-control-node.landscape-af11::after { content:"\2192"; position:absolute; z-index:1; top:50%; right:33px; transform:translateY(-50%); color:rgba(255,255,255,.72); font-size:15px; line-height:1; pointer-events:none; }
+    .landscape-control-node.landscape-af11 > div { position:absolute; z-index:2; left:calc(2px + var(--slide-x, 0px)); top:50%; width:45px; transform:translateY(-50%); text-align:center; transition:left 80ms ease; }
+    .landscape-control-node.landscape-af11 strong { font-size:11px; letter-spacing:.08em; }
+    .landscape-control-node.landscape-af11 span { display:none; }
+    .landscape-control-node.landscape-af11.is-dragging::before { background:rgba(255,255,255,.2); }
+    .landscape-control-node.landscape-af11.is-ready { border-color:rgba(150,235,190,.74); }
+    .landscape-control-node.landscape-af11.is-ready::before { background:rgba(150,235,190,.28); }
+    .shot-preview { pointer-events:auto; right:max(12px, env(safe-area-inset-right)); bottom:max(12px, env(safe-area-inset-bottom)); width:min(18vw,180px); min-width:88px; border-radius:10px; }
+
+    /* SETTINGS OVERLAY: landscape-only, reversible prototype layer. */
+    .landscape-settings-overlay { position:absolute; inset:0; z-index:20; pointer-events:none; overflow:hidden; }
+    .landscape-settings-overlay[hidden] { display:none; }
+    .landscape-settings-panel { position:absolute; inset:0; padding:0; border:0; border-radius:0; color:#fff; background:transparent; box-shadow:none; backdrop-filter:none; pointer-events:none; opacity:0; transform:none; transition:opacity 180ms ease; }
+    .landscape-settings-overlay.is-open .landscape-settings-panel { opacity:1; transform:translateX(0) scaleX(1); }
+    .landscape-settings-header { position:absolute; top:12px; left:12px; right:12px; z-index:4; display:flex; align-items:center; justify-content:space-between; gap:12px; pointer-events:none; }
+    .landscape-settings-close, .landscape-priority-options, .landscape-value-card button, .landscape-focus-controls { pointer-events:auto; }
+    .landscape-settings-title { display:grid; gap:2px; }
+    .landscape-settings-title { display:none; }
+    .landscape-settings-title strong { font-size:16px; letter-spacing:.08em; }
+    .landscape-settings-title span { color:rgba(255,255,255,.58); font-size:10px; letter-spacing:.08em; text-transform:uppercase; }
+    .landscape-settings-close { min-width:64px; min-height:34px; border:1px solid rgba(255,255,255,.24); border-radius:999px; color:#fff; background:rgba(0,0,0,.28); font:700 11px/1 system-ui,sans-serif; }
+    #landscapeOpenSettings, .landscape-settings-close { display:none; }
+    .landscape-settings-layout { position:absolute; inset:0; display:block; }
+    .landscape-setting-card { min-width:0; border:1px solid rgba(255,255,255,.14); border-radius:16px; padding:12px; background:rgba(0,0,0,.24); }
+    .landscape-setting-label { display:flex; justify-content:space-between; align-items:center; gap:8px; color:rgba(255,255,255,.62); font-size:10px; letter-spacing:.08em; text-transform:uppercase; }
+    .landscape-setting-label strong { color:#fff; font-size:12px; letter-spacing:.04em; }
+    .landscape-priority-card { position:absolute; top:70px; left:18px; width:240px; max-width:240px; }
+    .landscape-priority-options { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; margin-top:16px; }
+    .landscape-priority-options button, .landscape-value-card button { min-height:38px; border:1px solid rgba(255,255,255,.16); border-radius:10px; color:#fff; background:rgba(255,255,255,.04); font:700 13px/1 system-ui,sans-serif; }
+    .landscape-priority-options button.is-selected, .landscape-value-card button.is-selected { border-color:rgba(255,255,255,.66); background:rgba(255,255,255,.16); box-shadow:0 0 0 1px rgba(255,255,255,.12); }
+    .landscape-value-stack { position:absolute; top:70px; right:18px; width:min(360px,32vw); display:grid; align-content:start; gap:10px; }
+    .landscape-value-card { display:grid; gap:8px; }
+    .landscape-value-card button { width:100%; text-align:left; padding:0 12px; }
+    .landscape-focus-overlay { position:fixed; z-index:2; left:21%; top:8%; width:58%; height:75%; border:1px dashed rgba(255,255,255,.22); border-radius:0; pointer-events:none; }
+    .landscape-focus-label { position:absolute; top:10px; left:12px; display:grid; gap:2px; color:rgba(255,255,255,.62); font-size:9px; letter-spacing:.08em; text-transform:uppercase; }
+    .landscape-focus-label strong { color:#fff; font-size:11px; letter-spacing:.04em; }
+    .landscape-focus-crosshair { position:absolute; left:50%; top:50%; width:52px; height:52px; border:1px solid rgba(255,255,255,.86); border-radius:50%; transform:translate(-50%,-50%); transition:left 120ms ease, top 120ms ease; }
+    .landscape-focus-crosshair::before, .landscape-focus-crosshair::after { content:""; position:absolute; background:rgba(255,255,255,.72); }
+    .landscape-focus-crosshair::before { left:50%; top:-10px; width:1px; height:72px; transform:translateX(-50%); }
+    .landscape-focus-crosshair::after { top:50%; left:-10px; width:72px; height:1px; transform:translateY(-50%); }
+    .landscape-focus-controls { position:absolute; left:50%; bottom:18px; display:flex; align-items:center; gap:6px; transform:translateX(-50%); pointer-events:auto; }
+    .landscape-focus-controls { left:calc(50% - 110px); transform:none; }
+    .landscape-focus-controls button { width:34px; height:34px; border:1px solid rgba(255,255,255,.2); border-radius:9px; color:#fff; background:rgba(0,0,0,.35); font:700 15px/1 system-ui,sans-serif; }
+    .landscape-focus-mode { position:fixed; left:50%; top:auto; bottom:8%; min-width:66px; padding:0 9px; transform:translateX(-50%); font-size:10px !important; }
+    @media (max-width:700px) {
+      .landscape-settings-panel { inset:4% 2% 5%; padding:12px; border-radius:16px; }
+      .landscape-settings-layout { inset:62px 12px 12px; grid-template-columns:minmax(0,1fr) minmax(150px,.68fr); gap:10px; }
+      .landscape-setting-card { padding:9px; }
+      .landscape-focus-overlay { left:21%; width:49%; }
+      .landscape-focus-controls { bottom:10px; }
+    }
+
+    /* LCD / viewfinder HUD treatment: information stays visible without card chrome. */
+    .landscape-settings-title strong { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:13px; letter-spacing:.16em; }
+    .landscape-settings-title span { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:8px; letter-spacing:.18em; }
+    .landscape-setting-card { border:0; border-radius:0; padding:0; background:transparent; }
+    .landscape-priority-card { top:68px; left:18px; width:180px; }
+    .landscape-setting-label { color:rgba(255,255,255,.48); font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:9px; letter-spacing:.16em; }
+    .landscape-setting-label > span { display:none; }
+    .landscape-setting-label strong { color:rgba(255,255,255,.88); font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:10px; letter-spacing:.12em; }
+    .landscape-priority-options { display:flex; gap:10px; margin-top:10px; }
+    .landscape-priority-options button { min-height:28px; min-width:24px; padding:0; border:0; border-bottom:1px solid transparent; border-radius:0; color:rgba(255,255,255,.52); background:transparent; font:700 14px/1 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .landscape-priority-options button.is-selected { border-bottom-color:#fff; color:#fff; background:transparent; box-shadow:none; }
+    .landscape-priority-card .landscape-setting-label strong { display:none; }
+    .landscape-value-stack { top:68px; left:auto; right:10px; width:min(260px,25vw); transform:translateX(40%); gap:16px; }
+    .landscape-value-card { gap:4px; }
+    .landscape-value-card button { min-height:30px; width:auto; padding:0; border:0; border-bottom:1px solid rgba(255,255,255,.28); border-radius:0; color:#fff; background:transparent; font:700 17px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:.04em; }
+    .landscape-value-card:nth-child(2) .landscape-setting-label strong { display:none; }
+    .landscape-focus-overlay { left:0; top:0; width:100%; height:100%; border:0; border-radius:0; background:transparent; }
+    .landscape-focus-label { top:-22px; left:0; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .landscape-focus-label { display:none; }
+    .landscape-focus-label strong { font-size:10px; letter-spacing:.14em; }
+    .landscape-focus-crosshair { width:44px; height:32px; border:1px solid rgba(255,255,255,.9); border-radius:0; }
+    .landscape-focus-crosshair::before, .landscape-focus-crosshair::after { display:none; }
+    .landscape-focus-mode { min-width:58px; padding:0 4px; border:0 !important; border-bottom:1px solid rgba(255,255,255,.7) !important; border-radius:0 !important; color:#fff; background:transparent !important; font:700 11px/1.8 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .landscape-focus-mode > span { display:none; }
+    .landscape-focus-controls { display:grid; grid-template-columns:repeat(3,34px); grid-template-rows:repeat(3,34px); gap:0; width:102px; height:102px; left:calc(50% - 51px); bottom:8px; }
+    .landscape-focus-controls button:not(.landscape-focus-mode) { width:34px; height:34px; border:1px solid rgba(255,255,255,.24); border-radius:8px; color:rgba(255,255,255,.86); background:rgba(0,0,0,.28); font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .landscape-focus-controls button:nth-child(1) { grid-column:1; grid-row:2; }
+    .landscape-focus-controls button:nth-child(2) { grid-column:2; grid-row:1; }
+    .landscape-focus-controls button:nth-child(3) { grid-column:2; grid-row:3; }
+    .landscape-focus-controls button:nth-child(4) { grid-column:3; grid-row:2; }
+    .landscape-focus-controls { position:fixed; left:calc(50% - 40px); bottom:0%; width:104px; height:104px; display:grid; grid-template-columns:repeat(2,52px); grid-template-rows:repeat(2,52px); border:1px solid rgba(255,255,255,.42); border-radius:50%; overflow:hidden; background:rgba(0,0,0,.18); transform:none; }
+    .landscape-focus-controls button:not(.landscape-focus-mode) { width:52px; height:52px; border:0; border-radius:0; color:rgba(255,255,255,.86); background:transparent; font:700 15px/1 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .landscape-focus-controls button:nth-child(1) { grid-column:1; grid-row:1; border-right:1px solid rgba(255,255,255,.22); border-bottom:1px solid rgba(255,255,255,.22); }
+    .landscape-focus-controls button:nth-child(2) { grid-column:2; grid-row:1; border-bottom:1px solid rgba(255,255,255,.22); }
+    .landscape-focus-controls button:nth-child(3) { grid-column:1; grid-row:2; border-right:1px solid rgba(255,255,255,.22); }
+    .landscape-focus-controls button:nth-child(4) { grid-column:2; grid-row:2; }
+    .landscape-focus-mode { left:75%; bottom:8%; }
+    .landscape-focus-controls { display:block; overflow:hidden; background:rgba(0,0,0,.16); }
+    .landscape-focus-controls::before { content:""; position:absolute; inset:0; z-index:0; background:linear-gradient(45deg,transparent 49.1%,rgba(255,255,255,.3) 49.7%,rgba(255,255,255,.3) 50.3%,transparent 50.9%),linear-gradient(-45deg,transparent 49.1%,rgba(255,255,255,.3) 49.7%,rgba(255,255,255,.3) 50.3%,transparent 50.9%); pointer-events:none; }
+    .landscape-focus-controls button:not(.landscape-focus-mode) { position:absolute; inset:0; z-index:1; display:flex; width:104px; height:104px; padding:0; border:0; border-radius:0; color:rgba(255,255,255,.9); background:transparent; font:700 15px/1 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .landscape-focus-controls button:nth-child(1) { grid-column:auto; grid-row:auto; clip-path:polygon(0 0,50% 50%,0 100%); justify-content:flex-start; align-items:center; padding-left:12px; border:0; }
+    .landscape-focus-controls button:nth-child(2) { grid-column:auto; grid-row:auto; clip-path:polygon(0 0,100% 0,50% 50%); justify-content:center; align-items:flex-start; padding-top:10px; border:0; }
+    .landscape-focus-controls button:nth-child(3) { grid-column:auto; grid-row:auto; clip-path:polygon(50% 50%,100% 100%,0 100%); justify-content:center; align-items:flex-end; padding-bottom:10px; border:0; }
+    .landscape-focus-controls button:nth-child(4) { grid-column:auto; grid-row:auto; clip-path:polygon(50% 50%,100% 0,100% 100%); justify-content:flex-end; align-items:center; padding-right:12px; border:0; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar"></header>
+
+    <section class="preview-card">
+      <img id="liveFrame" class="preview-frame" alt="Live view" />
+      <div class="preview-overlay">
+        <button id="landscapeExit" class="landscape-exit" type="button">설정</button>
+        <div class="landscape-layout-tools" aria-label="가로 레이아웃 도구">
+          <button id="landscapeOpenSettings" type="button" aria-expanded="false">설정</button>
+          <button id="landscapeToggleEdit" type="button">Edit</button>
+          <button id="landscapeSaveLayout" type="button" hidden>Save</button>
+        </div>
+        <div id="landscapeControlStage" class="landscape-control-stage" aria-label="카메라 제어 샌드박스">
+          <button class="control-node primary landscape-control-node landscape-af11" data-id="landscapeShutter" data-action="shutter" style="--landscape-size:148px;--size:148px;"><div><strong>AF</strong><span>capture</span></div></button>
+          <button class="control-node accent landscape-control-node landscape-af01" data-id="landscapeLiveOn" data-action="live-on" style="--landscape-size:70px;--size:70px;"><div><strong>LIVE</strong><span>start</span></div></button>
+          <button class="control-node danger landscape-control-node landscape-af01" data-id="landscapeLiveOff" data-action="live-off" style="--landscape-size:70px;--size:70px;"><div><strong>STOP</strong><span>live</span></div></button>
+          <button class="control-node danger landscape-control-node landscape-af01" data-id="landscapeReset" data-action="reset" style="--landscape-size:70px;--size:70px;"><div><strong>KILL</strong><span>cmd</span></div></button>
+          <button class="control-node landscape-control-node landscape-af01" data-id="landscapeMaintain" data-action="maintain" style="--landscape-size:70px;--size:70px;"><div><strong>CLEAN</strong><span>session</span></div></button>
+        </div>
+        <div class="overlay-badge overlay-time">Time <strong id="lastUpdate">--:--:--</strong></div>
+        <div class="overlay-badge overlay-camera">Camera <strong id="statusConn">Detecting</strong></div>
+          <img id="shotThumbImage" class="shot-preview" alt="Captured preview" hidden />
+        <div id="landscapeSettingsOverlay" class="landscape-settings-overlay" hidden aria-label="카메라 설정">
+          <div class="landscape-settings-panel">
+            <div class="landscape-settings-header">
+              <div class="landscape-settings-title"><strong>설정</strong><span>Camera controls</span></div>
+              <button id="landscapeCloseSettings" class="landscape-settings-close" type="button">닫기</button>
+            </div>
+            <div class="landscape-settings-layout">
+              <div class="landscape-setting-card landscape-priority-card">
+                <div class="landscape-setting-label"><span>3-1</span><strong>Priority</strong></div>
+                <div class="landscape-priority-options" role="group" aria-label="Priority mode">
+                  <button type="button" data-priority="A" class="is-selected">A</button><button type="button" data-priority="P">P</button><button type="button" data-priority="S">S</button><button type="button" data-priority="M">M</button>
+                </div>
+              </div>
+              <div class="landscape-value-stack">
+                <div class="landscape-setting-card landscape-value-card"><div class="landscape-setting-label"><span>3-2</span><strong>F값</strong></div><button type="button" data-value-cycle="aperture">F2.8</button></div>
+                <div class="landscape-setting-card landscape-value-card"><div class="landscape-setting-label"><span>3-3</span><strong>셔터속도</strong></div><button type="button" data-value-cycle="shutter">1/200</button></div>
+                <div class="landscape-setting-card landscape-value-card"><div class="landscape-setting-label"><span>3-4</span><strong>ISO</strong></div><button type="button" data-value-cycle="iso">ISO 150</button></div>
+              </div>
+            </div>
+            <div class="landscape-focus-overlay" aria-label="초점 영역">
+              <div class="landscape-focus-label"><span>3-5</span><strong>Focus area</strong></div>
+              <div id="landscapeFocusCrosshair" class="landscape-focus-crosshair"></div>
+              <div class="landscape-focus-controls" aria-label="초점 영역 이동">
+                <button type="button" data-focus-move="left" aria-label="왼쪽">←</button><button type="button" data-focus-move="up" aria-label="위">↑</button><button type="button" data-focus-move="down" aria-label="아래">↓</button><button type="button" data-focus-move="right" aria-label="오른쪽">→</button><button id="landscapeFocusMode" class="landscape-focus-mode" type="button"><span>3-6</span> AF-S</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="control-card">
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <div>
+            <div class="battery-pill">
+              Battery <strong id="batteryLevel">--%</strong>
+              <span class="live-metrics">
+                <span>FPS <strong id="fpsMeter">--</strong></span>
+                <span>Latency <strong id="latencyMeter">--</strong></span>
+              </span>
+            </div>
+            <div class="session-condition">Session Condition <strong id="sessionCondition">Preparing</strong></div>
+            <div class="session-id">Session <strong id="sessionLabel">---</strong></div>
+          </div>
+        </div>
+        <div class="toolbar-actions">
+          <button id="toggleEdit" class="small-btn">Edit</button>
+          <button id="saveLayout" class="small-btn primary" hidden>Save</button>
+        </div>
+      </div>
+
+      <div id="controlStage" class="control-stage">
+        <button class="control-node accent" data-id="af" data-action="af" style="--size:70px;--size-mobile:64px;"><div><strong>AF</strong><span>focus</span></div></button>
+        <button class="control-node primary" data-id="shutter" data-action="shutter" style="--size:88px;--size-mobile:80px;"><div><strong>SHOT</strong><span>capture</span></div></button>
+        <button class="control-node accent" data-id="liveOn" data-action="live-on" style="--size:68px;--size-mobile:62px;"><div><strong>LIVE</strong><span>start</span></div></button>
+        <button class="control-node danger" data-id="liveOff" data-action="live-off" style="--size:68px;--size-mobile:62px;"><div><strong>STOP</strong><span>live</span></div></button>
+        <button class="control-node danger" data-id="reset" data-action="reset" style="--size:72px;--size-mobile:66px;"><div><strong>KILL</strong><span>cmd</span></div></button>
+        <button class="control-node" data-id="maintain" data-action="maintain" style="--size:58px;--size-mobile:54px;"><div><strong>CLEAN</strong><span>session</span></div></button>
+      </div>
+    </section>
+
+    <div class="hidden-status" aria-hidden="true">
+      <span id="connState">Detecting</span>
+      <span id="heroState">Checking device availability</span>
+      <span id="lastAction">Last action: none</span>
+      <span id="layoutNotice">Layout mode off</span>
+      <span id="previewMode">idle</span>
+      <span id="cameraState">Preparing</span>
+      <span id="previewState">manual</span>
+      <span id="statusSource">bridge /cgi-bin/liveview</span>
+      <span id="frameType">--</span>
+    </div>
+  </div>
+
+  <section id="shotViewer" class="shot-viewer" hidden aria-label="Captured JPEG viewer">
+    <div class="shot-viewer-bar">
+      <span>Captured JPEG</span>
+      <button id="shotViewerClose" class="small-btn primary" type="button">Back</button>
+    </div>
+    <div class="shot-viewer-body">
+      <img id="shotViewerImage" class="shot-viewer-image" alt="Captured JPEG full view" />
+    </div>
+  </section>
+
+  <script>
+    const TRACE_FRAME_PIPELINE = new URLSearchParams(location.search).has("trace");
+    const liveFrame = document.getElementById("liveFrame");
+    const connState = document.getElementById("connState");
+    const heroState = document.getElementById("heroState");
+    const lastAction = document.getElementById("lastAction");
+    const lastUpdate = document.getElementById("lastUpdate");
+    const previewMode = document.getElementById("previewMode");
+    const previewState = document.getElementById("previewState");
+    const statusConn = document.getElementById("statusConn");
+    const cameraState = document.getElementById("cameraState");
+    const statusSource = document.getElementById("statusSource");
+    const frameType = document.getElementById("frameType");
+    const layoutNotice = document.getElementById("layoutNotice");
+    const batteryLevel = document.getElementById("batteryLevel");
+    const fpsMeter = document.getElementById("fpsMeter");
+    const latencyMeter = document.getElementById("latencyMeter");
+    const sessionCondition = document.getElementById("sessionCondition");
+    const sessionLabel = document.getElementById("sessionLabel");
+    const toggleEdit = document.getElementById("toggleEdit");
+    const saveLayout = document.getElementById("saveLayout");
+    const shotThumbImage = document.getElementById("shotThumbImage");
+    const shotViewer = document.getElementById("shotViewer");
+    const shotViewerImage = document.getElementById("shotViewerImage");
+    const shotViewerClose = document.getElementById("shotViewerClose");
+    const controlStage = document.getElementById("controlStage");
+    const landscapeControlStage = document.getElementById("landscapeControlStage");
+    const layoutStage = landscapeControlStage || controlStage;
+    const landscapeToggleEdit = document.getElementById("landscapeToggleEdit");
+    const landscapeSaveLayout = document.getElementById("landscapeSaveLayout");
+    const controlNodes = Array.from(document.querySelectorAll(".control-node"));
+
+    // SETTINGS OVERLAY: keep this block isolated so the prototype can be rolled back cleanly.
+    const landscapeOpenSettings = document.getElementById("landscapeOpenSettings");
+    const landscapeSettingsOverlay = document.getElementById("landscapeSettingsOverlay");
+    const landscapeCloseSettings = document.getElementById("landscapeCloseSettings");
+    const landscapeFocusCrosshair = document.getElementById("landscapeFocusCrosshair");
+    const landscapeFocusMode = document.getElementById("landscapeFocusMode");
+    const landscapeFocusPosition = { x: 50, y: 50 };
+    const landscapeSettingCycles = {
+      aperture: ["F2.8", "F4", "F5.6", "F8"],
+      shutter: ["1/60", "1/125", "1/200", "1/500"],
+      iso: ["ISO 100", "ISO 150", "ISO 400", "ISO 800"],
+    };
+    const landscapeSettingCycleIndex = { aperture: 0, shutter: 2, iso: 1 };
+
+    const query = new URLSearchParams(window.location.search);
+    const MEASURE_END_TO_END_LATENCY = query.has("e2e");
+    const MEASURE_TOTAL_LATENCY = query.get("e2e") === "total";
+    // The current UI and boot manager must use the same v21 runtime.
+    const apiVariant = query.get("variant") || "v21";
+    const apiSuffix = apiVariant === "v21" ? "-v21" : "";
+    const BOOT_TOKEN = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const API = {
+      status: `/cgi-bin/status${apiSuffix}?boot=${BOOT_TOKEN}`,
+      liveview: `/cgi-bin/liveview${apiSuffix}?boot=${BOOT_TOKEN}`,
+      action: `/cgi-bin/action${apiSuffix}`,
+      captureEvent: "/cgi-bin/capture-event",
+      capturedPreview: "/cgi-bin/captured-preview",
+      capturedObject: "/cgi-bin/captured-object",
+    };
+    const LIVE_WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:8191/`;
+    const LAYOUT_STORAGE_KEY = "d810-cc-layout-v1";
+    const SHOT_PREVIEW_STORAGE_KEY = "d810-shot-preview-dataurl";
+    const SHOT_PREVIEW_AT_KEY = "d810-shot-preview-at";
+    const DEFAULT_LAYOUT = {
+      af: { x: 72, y: 24 },
+      shutter: { x: 88, y: 24 },
+      liveOn: { x: 88, y: 44 },
+      liveOff: { x: 72, y: 64 },
+      reset: { x: 50, y: 82 },
+      maintain: { x: 50, y: 92 },
+      landscapeShutter: { x: 18, y: 76 },
+      landscapeLiveOn: { x: 41, y: 76 },
+      landscapeLiveOff: { x: 58, y: 76 },
+      landscapeReset: { x: 75, y: 76 },
+      landscapeMaintain: { x: 87, y: 76 },
+    };
+    const LEGACY_DEFAULT_LAYOUT = {
+      af: { x: 22, y: 38 },
+      shutter: { x: 50, y: 72 },
+      liveOn: { x: 76, y: 28 },
+      liveOff: { x: 20, y: 74 },
+    };
+
+    const actionMessages = {
+      af: "Auto focus triggered",
+      shutter: "Shutter fired",
+      "live-on": "Live preview started",
+      "live-off": "Live preview stopped",
+      reset: "Current command killed",
+      maintain: "Session maintained",
+    };
+    const actionResumeDelay = {
+      af: 120,
+      shutter: 450,
+    };
+
+    let liveMode = false;
+    let liveSocket = null;
+    let liveSocketMeta = null;
+    let liveSocketPendingMeta = null;
+    let liveRenderBusy = false;
+    let livePendingBlob = null;
+    let livePendingOptions = null;
+    let liveSocketFallback = false;
+    let currentFrameSeq = 0;
+    let editMode = false;
+    let dragState = null;
+    let shotThumbUrl = "";
+    let shotViewerLoadToken = 0;
+    let currentCameraPhase = "Detecting";
+    let currentSessionPhase = "Preparing";
+    let actionInFlight = false;
+    let statusRefreshTimer = null;
+    let externalShotTimer = null;
+    let externalShotProbeInFlight = false;
+    let lastCapturedShotSignature = "";
+    let lastCaptureEventSeq = null;
+    let lastCameraObjectSignature = "";
+    let liveLoopTimer = null;
+    let sessionRecoveryTimer = null;
+    let sessionRecoveryInFlight = false;
+    let sessionRecoveryAttempt = 0;
+    let frameFetchInFlight = false;
+    let requestTraceSeq = 0;
+    let activeControlNode = null;
+    let activePointerId = null;
+    let actionStartedAt = 0;
+    let liveFrameObjectUrl = "";
+    let startupPhaseLocked = false;
+    let currentActionController = null;
+    const LIVE_STATS_WINDOW_MS = 1500;
+    let liveFrameTimes = [];
+    let liveLatencySamples = [];
+    let currentLiveFps = null;
+    let currentAvgLatencyMs = null;
+
+    const LIVE_INITIAL_DELAY_MS = 0;
+    const LIVE_FRAME_DELAY_MS = 0;
+    const LIVE_PENDING_DELAY_MS = 32;
+    const LIVE_RETRY_DELAY_MS = 80;
+    const STATUS_REFRESH_INTERVAL_MS = 3000;
+    const TRANSIENT_STATUS_REFRESH_INTERVAL_MS = 1000;
+    const PLACEHOLDER_URL = "data:image/svg+xml;utf8," + encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1067">
+        <defs>
+          <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#141414"/>
+            <stop offset="50%" stop-color="#090909"/>
+            <stop offset="100%" stop-color="#1c1c1c"/>
+          </linearGradient>
+        </defs>
+        <rect width="1600" height="1067" fill="url(#bg)"/>
+        <circle cx="310" cy="850" r="240" fill="rgba(255,255,255,0.04)"/>
+        <circle cx="1280" cy="180" r="160" fill="rgba(255,255,255,0.06)"/>
+        <rect x="82" y="302" width="1436" height="572" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
+        <text x="94" y="164" fill="rgba(237,244,255,0.86)" font-size="54" font-family="Arial, sans-serif">Live View Ready</text>
+        <text x="94" y="220" fill="rgba(159,176,199,0.88)" font-size="28" font-family="Arial, sans-serif">Use the circular buttons below</text>
+      </svg>`
+    );
+
+    function stampTime() {
+      lastUpdate.textContent = new Date().toLocaleTimeString("ko-KR", { hour12: false });
+    }
+
+    function shellStatus(text, detail) {
+      connState.textContent = text;
+      heroState.textContent = detail;
+    }
+
+    function applyCameraPhase(phase, detail = "") {
+      currentCameraPhase = phase;
+      statusConn.textContent = phase;
+      connState.textContent = phase;
+      heroState.textContent = detail;
+    }
+
+    function applySessionPhase(phase, detail = "") {
+      currentSessionPhase = phase;
+      sessionCondition.textContent = phase;
+      cameraState.textContent = phase;
+    }
+
+    function cameraPhaseRank(phase) {
+      return phase === "Connect" ? 2 : 1;
+    }
+
+    function sessionPhaseRank(phase) {
+      return phase === "Ready" ? 2 : 1;
+    }
+
+    function applyCameraPhaseProgressive(phase, detail = "", options = {}) {
+      const nextPhase = phase || "Detecting";
+      if (!options.force && cameraPhaseRank(nextPhase) < cameraPhaseRank(currentCameraPhase)) {
+        return;
+      }
+      applyCameraPhase(nextPhase, detail);
+    }
+
+    function applySessionPhaseProgressive(phase, detail = "", options = {}) {
+      if (startupPhaseLocked && !options.allowAfterLock) {
+        return;
+      }
+      const nextPhase = phase || "Preparing";
+      if (!options.force && sessionPhaseRank(nextPhase) < sessionPhaseRank(currentSessionPhase)) {
+        return;
+      }
+      applySessionPhase(nextPhase, detail);
+    }
+
+    function deriveCameraPhase(data = {}, options = {}) {
+      const backendState = String(data.backendState || "");
+      const live = Boolean(options.live ?? data.liveView);
+      const cameraDetected = data.cameraDetected === true;
+      const hardwareDetected = data.hardwareDetected === true;
+      const connected = data.connected === true || data.transportReady === true;
+      if (cameraDetected || hardwareDetected || connected || backendState === "connecting" || backendState === "ready" || backendState === "live") {
+        return {
+          phase: "Connect",
+          detail: live ? "Camera link is established" : "Camera link is established",
+        };
+      }
+      return {
+        phase: "Detecting",
+        detail: "Checking whether the camera is attached",
+      };
+    }
+
+    function deriveSessionPhase(data = {}, options = {}) {
+      const backendState = String(data.backendState || "");
+      const live = Boolean(options.live ?? data.liveView);
+      const connected = data.connected === true;
+      const transportReady = data.transportReady === true;
+      const softwareReady = data.softwareReady === true
+        || data.status === "ready"
+        || data.status === "liveview_on";
+
+      if (backendState === "recovering" || backendState === "degraded") {
+        return {
+          phase: "Preparing",
+          detail: live ? "Recovering the live session" : "Recovering the camera session",
+        };
+      }
+
+      if (softwareReady && (connected || transportReady || backendState === "live" || backendState === "ready")) {
+        return {
+          phase: "Ready",
+          detail: live ? "Live view and commands are ready right away" : "Camera is ready for commands",
+        };
+      }
+
+      return {
+        phase: "Preparing",
+        detail: live ? "Preparing the live session" : "Preparing the camera session",
+      };
+    }
+
+    function setAction(text) {
+      lastAction.textContent = `Last action: ${text}`;
+      stampTime();
+    }
+
+    function setBatteryLevel(value) {
+      const next = Number(value);
+      batteryLevel.textContent = Number.isFinite(next) ? `${Math.max(0, Math.min(100, Math.round(next)))}%` : "--%";
+    }
+
+    function setSessionCondition(value) {
+      sessionCondition.textContent = String(value || "Ready");
+    }
+
+    function setSessionIdentity(value) {
+      sessionLabel.textContent = String(value || "---");
+    }
+
+    function formatSessionIdentity(data = {}) {
+      if (typeof data.sessionLabel === "string" && data.sessionLabel) {
+        return data.sessionLabel;
+      }
+      const sessionId = Number(data.sessionId);
+      if (Number.isFinite(sessionId) && sessionId > 0) {
+        return `${String(Math.round(sessionId)).padStart(3, "0")}_?몄뀡`;
+      }
+      return "";
+    }
+
+    function formatCompactFps(value) {
+      return Number.isFinite(value) && value >= 0 ? value.toFixed(1) : "--";
+    }
+
+    function formatCompactLatency(value) {
+      return Number.isFinite(value) && value >= 0 ? `${Math.round(value)}ms` : "--";
+    }
+
+    function pushWindowSample(queue, timestamp, windowMs) {
+      if (!Number.isFinite(timestamp) || timestamp <= 0) {
+        return null;
+      }
+      queue.push(timestamp);
+      const minTime = timestamp - windowMs;
+      while (queue.length && queue[0] < minTime) {
+        queue.shift();
+      }
+      if (queue.length < 2) {
+        return 0;
+      }
+      const span = queue[queue.length - 1] - queue[0];
+      return span > 0 ? ((queue.length - 1) * 1000) / span : 0;
+    }
+
+    function pushLatencySample(queue, timestamp, value, windowMs) {
+      if (!Number.isFinite(timestamp) || timestamp <= 0 || !Number.isFinite(value) || value < 0) {
+        return null;
+      }
+      queue.push({ t: timestamp, v: value });
+      const minTime = timestamp - windowMs;
+      while (queue.length && queue[0].t < minTime) {
+        queue.shift();
+      }
+      if (!queue.length) {
+        return null;
+      }
+      const total = queue.reduce((sum, sample) => sum + sample.v, 0);
+      return total / queue.length;
+    }
+
+    function updateLiveMetrics() {
+      fpsMeter.textContent = formatCompactFps(currentLiveFps);
+      latencyMeter.textContent = formatCompactLatency(currentAvgLatencyMs);
+    }
+
+    function resetLiveMetrics() {
+      liveFrameTimes = [];
+      liveLatencySamples = [];
+      currentLiveFps = null;
+      currentAvgLatencyMs = null;
+      updateLiveMetrics();
+    }
+
+    async function refreshBatteryLevel() {
+      setBatteryLevel(undefined);
+    }
+
+    function revokeShotThumbUrl() {
+      if (!shotThumbUrl) {
+        return;
+      }
+      URL.revokeObjectURL(shotThumbUrl);
+      shotThumbUrl = "";
+    }
+
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error || new Error("file_read_failed"));
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function storeShotPreview(blob) {
+      revokeShotThumbUrl();
+      shotThumbUrl = URL.createObjectURL(blob);
+      shotThumbImage.src = shotThumbUrl;
+      shotThumbImage.hidden = false;
+      try {
+        const dataUrl = await blobToDataUrl(blob);
+        sessionStorage.setItem(SHOT_PREVIEW_STORAGE_KEY, dataUrl);
+        sessionStorage.setItem(SHOT_PREVIEW_AT_KEY, String(Date.now()));
+      } catch (_) {}
+    }
+
+    function restoreShotPreview() {
+      try {
+        const dataUrl = sessionStorage.getItem(SHOT_PREVIEW_STORAGE_KEY);
+        if (dataUrl) {
+          shotThumbImage.src = dataUrl;
+          shotThumbImage.hidden = false;
+        }
+      } catch (_) {}
+    }
+
+    function clearVolatileInspectionState() {
+      try {
+        sessionStorage.removeItem(SHOT_PREVIEW_STORAGE_KEY);
+        sessionStorage.removeItem(SHOT_PREVIEW_AT_KEY);
+      } catch (_) {}
+      revokeShotThumbUrl();
+      shotThumbImage.removeAttribute("src");
+      shotThumbImage.hidden = true;
+    }
+
+    function isReloadNavigation() {
+      try {
+        const nav = performance.getEntriesByType("navigation")[0];
+        if (nav && nav.type === "reload") {
+          return true;
+        }
+      } catch (_) {}
+      return performance.navigation && performance.navigation.type === 1;
+    }
+
+    function showShotViewer() {
+      if (shotThumbImage.hidden || !shotThumbImage.src) {
+        return;
+      }
+      const loadToken = ++shotViewerLoadToken;
+      shotViewer.hidden = false;
+      shotViewerImage.style.background = `#000 url(${JSON.stringify(shotThumbImage.src)}) center / contain no-repeat`;
+      shotViewerImage.src = shotThumbImage.src;
+      void requestPortraitViewer();
+      shotViewerImage.onload = () => {
+        if (loadToken === shotViewerLoadToken && shotViewerImage.src.includes(API.capturedObject)) {
+          shotViewerImage.style.background = "#000";
+        }
+      };
+      shotViewerImage.onerror = () => {
+        if (loadToken === shotViewerLoadToken) {
+          shotViewerImage.removeAttribute("src");
+        }
+      };
+      requestAnimationFrame(() => {
+        if (loadToken === shotViewerLoadToken && !shotViewer.hidden) {
+          shotViewerImage.src = `${API.capturedObject}?t=${Date.now()}`;
+        }
+      });
+    }
+
+    async function requestPortraitViewer() {
+      try {
+        if (shotViewer.requestFullscreen && !document.fullscreenElement) {
+          await shotViewer.requestFullscreen();
+        }
+      } catch (_) {}
+      try {
+        if (screen.orientation && screen.orientation.lock) {
+          await screen.orientation.lock("landscape");
+        }
+      } catch (_) {}
+    }
+
+    async function hideShotViewer() {
+      shotViewer.hidden = true;
+      shotViewerLoadToken += 1;
+      shotViewerImage.onload = null;
+      shotViewerImage.onerror = null;
+      shotViewerImage.style.background = "#000";
+      shotViewerImage.removeAttribute("src");
+      try {
+        if (screen.orientation && screen.orientation.unlock) {
+          screen.orientation.unlock();
+        }
+      } catch (_) {}
+      try {
+        if (document.fullscreenElement) {
+          await document.exitFullscreen();
+        }
+      } catch (_) {}
+    }
+
+    function drawPlaceholder() {
+      liveFrame.src = PLACEHOLDER_URL;
+    }
+
+    function loadLayout() {
+      try {
+        const raw = localStorage.getItem(LAYOUT_STORAGE_KEY);
+        if (!raw) {
+          return { ...DEFAULT_LAYOUT };
+        }
+        const parsed = JSON.parse(raw);
+        const merged = { ...DEFAULT_LAYOUT, ...parsed };
+        const looksLegacy = Object.keys(LEGACY_DEFAULT_LAYOUT).every((key) => {
+          const legacy = LEGACY_DEFAULT_LAYOUT[key];
+          const current = merged[key];
+          return current && Number(current.x) === legacy.x && Number(current.y) === legacy.y;
+        });
+        return looksLegacy ? { ...DEFAULT_LAYOUT } : merged;
+      } catch (_) {
+        return { ...DEFAULT_LAYOUT };
+      }
+    }
+
+    function persistLayout(layout) {
+      localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layout));
+    }
+
+    function currentLayout() {
+      const layout = {};
+      for (const node of controlNodes) {
+        layout[node.dataset.id] = { x: Number(node.dataset.x || 50), y: Number(node.dataset.y || 50) };
+      }
+      return layout;
+    }
+
+    function applyLayout(layout) {
+      for (const node of controlNodes) {
+        const point = layout[node.dataset.id] || DEFAULT_LAYOUT[node.dataset.id] || { x: 50, y: 50 };
+        const x = Math.max(8, Math.min(92, Number(point.x) || 50));
+        const y = Math.max(10, Math.min(90, Number(point.y) || 50));
+        node.dataset.x = String(x);
+        node.dataset.y = String(y);
+        node.style.left = `${x}%`;
+        node.style.top = `${y}%`;
+      }
+    }
+
+    function setEditMode(next) {
+      editMode = !!next;
+      controlStage.classList.toggle("editing", editMode);
+      layoutStage.classList.toggle("editing", editMode);
+      for (const node of controlNodes) {
+        node.classList.toggle("editing", editMode);
+      }
+      toggleEdit.textContent = editMode ? "Done" : "Edit";
+      saveLayout.hidden = !editMode;
+      landscapeToggleEdit.textContent = editMode ? "Done" : "Edit";
+      landscapeSaveLayout.hidden = !editMode;
+      layoutNotice.textContent = editMode ? "Drag buttons, then save" : "Layout off";
+    }
+
+    function updateNodePosition(node, clientX, clientY) {
+      const rect = layoutStage.getBoundingClientRect();
+      const x = ((clientX - rect.left) / rect.width) * 100;
+      const y = ((clientY - rect.top) / rect.height) * 100;
+      const clampedX = Math.max(8, Math.min(92, x));
+      const clampedY = Math.max(10, Math.min(90, y));
+      node.dataset.x = String(clampedX);
+      node.dataset.y = String(clampedY);
+      node.style.left = `${clampedX}%`;
+      node.style.top = `${clampedY}%`;
+    }
+
+    function beginDrag(event) {
+      if (!editMode) {
+        return;
+      }
+      const node = event.currentTarget;
+      dragState = { node };
+      node.classList.add("dragging");
+      node.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    }
+
+    function moveDrag(event) {
+      if (!dragState || event.currentTarget !== dragState.node) {
+        return;
+      }
+      updateNodePosition(dragState.node, event.clientX, event.clientY);
+    }
+
+    function endDrag(event) {
+      if (!dragState || event.currentTarget !== dragState.node) {
+        return;
+      }
+      dragState.node.classList.remove("dragging");
+      try {
+        dragState.node.releasePointerCapture(event.pointerId);
+      } catch (_) {}
+      persistLayout(currentLayout());
+      layoutNotice.textContent = "Layout saved";
+      dragState = null;
+    }
+
+    async function fetchJson(url, options = {}) {
+      const controller = options.controller || new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      try {
+        const traceId = `${Date.now().toString(36)}-${(++requestTraceSeq).toString(36)}`;
+        const headers = new Headers(options.headers || {});
+        headers.set("X-D810-Client", "ui-flat");
+        headers.set("X-D810-Trace", traceId);
+        headers.set("X-D810-Event", url.includes("/action") ? "action" : url.includes("/status") ? "status" : url.includes("/session-manager") ? "boot" : "json");
+        headers.set("X-D810-Url", url);
+        if (options.uiAt != null) {
+          headers.set("X-D810-Ui-At", String(options.uiAt));
+        }
+        if (options.uiStage) {
+          headers.set("X-D810-Ui-Stage", String(options.uiStage));
+        }
+        if (options.uiAction) {
+          headers.set("X-D810-Ui-Action", String(options.uiAction));
+        }
+        const requestOptions = { ...options, cache: "no-store", signal: controller.signal, headers };
+        delete requestOptions.controller;
+        const response = await fetch(url, requestOptions);
+        const raw = await response.text();
+        const data = JSON.parse(raw);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return data;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function revokeLiveFrameObjectUrl() {
+      if (!liveFrameObjectUrl) {
+        return;
+      }
+      URL.revokeObjectURL(liveFrameObjectUrl);
+      liveFrameObjectUrl = "";
+    }
+
+    async function loadFrameImage(url) {
+      const traceId = `${Date.now().toString(36)}-${(++requestTraceSeq).toString(36)}`;
+      const response = await fetch(url, {
+        cache: "no-store",
+        headers: {
+          "X-D810-Client": "ui-flat",
+          "X-D810-Trace": traceId,
+          "X-D810-Event": "liveview",
+          "X-D810-Url": url,
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`frame_http_${response.status}`);
+      }
+      const blob = await response.blob();
+      if (!blob || !blob.size) {
+        throw new Error("frame_empty");
+      }
+      if (blob.type && blob.type !== "image/jpeg") {
+        throw new Error(`frame_type_${blob.type}`);
+      }
+      const objectUrl = URL.createObjectURL(blob);
+      return new Promise((resolve, reject) => {
+        const previousUrl = liveFrameObjectUrl;
+        const onLoad = () => {
+          liveFrame.removeEventListener("load", onLoad);
+          liveFrame.removeEventListener("error", onError);
+          liveFrameObjectUrl = objectUrl;
+          if (previousUrl) {
+            URL.revokeObjectURL(previousUrl);
+          }
+          resolve(objectUrl);
+        };
+        const onError = () => {
+          liveFrame.removeEventListener("load", onLoad);
+          liveFrame.removeEventListener("error", onError);
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error("frame_load_failed"));
+        };
+        liveFrame.addEventListener("load", onLoad, { once: true });
+        liveFrame.addEventListener("error", onError, { once: true });
+        liveFrame.src = objectUrl;
+      });
+    }
+
+    function closeLiveSocket() {
+      liveSocketMeta = null;
+      liveSocketPendingMeta = null;
+      livePendingBlob = null;
+      livePendingOptions = null;
+      if (liveSocket) {
+        const socket = liveSocket;
+        socket.__d810ExpectedClose = true;
+        try { socket.close(); } catch (_) {}
+      }
+      liveSocket = null;
+    }
+
+    function renderLiveFrameBlob(blob, options = {}) {
+      if (!blob || !blob.size) {
+        throw new Error("frame_empty");
+      }
+      const objectUrl = URL.createObjectURL(blob);
+      return new Promise((resolve, reject) => {
+        const previousUrl = liveFrameObjectUrl;
+        const onLoad = () => {
+          liveFrame.removeEventListener("load", onLoad);
+          liveFrame.removeEventListener("error", onError);
+          liveFrameObjectUrl = objectUrl;
+          if (previousUrl) URL.revokeObjectURL(previousUrl);
+          const renderedAt = performance.now();
+          currentLiveFps = pushWindowSample(liveFrameTimes, renderedAt, LIVE_STATS_WINDOW_MS);
+          const captureDoneAt = Number(options.captureDoneAt) || 0;
+          const latencyStartedAt = MEASURE_TOTAL_LATENCY
+            ? Number(options.startedAt) || 0
+            : captureDoneAt;
+          const latencyMs = MEASURE_END_TO_END_LATENCY && latencyStartedAt > 0
+            ? Math.max(0, Date.now() - latencyStartedAt)
+            : Number(options.totalMs) || 0;
+          if (latencyMs > 0) currentAvgLatencyMs = pushLatencySample(liveLatencySamples, renderedAt, latencyMs, LIVE_STATS_WINDOW_MS);
+          updateLiveMetrics();
+          frameType.textContent = "image/jpeg (websocket live)";
+          previewMode.textContent = "live";
+          previewState.textContent = "live";
+          statusSource.textContent = "bridge websocket /cgi-bin/liveview";
+          if (TRACE_FRAME_PIPELINE) console.info("[frame-pipeline] ui_loaded", { frameId: options.frameId ?? 0, bytes: blob.size, at: renderedAt, meta: options });
+          applySessionPhaseProgressive("Ready", "The latest live frame arrived", { force: true, allowAfterLock: true });
+          stampTime();
+          resolve(true);
+        };
+        const onError = () => {
+          liveFrame.removeEventListener("load", onLoad);
+          liveFrame.removeEventListener("error", onError);
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error("frame_load_failed"));
+        };
+        liveFrame.addEventListener("load", onLoad, { once: true });
+        liveFrame.addEventListener("error", onError, { once: true });
+        liveFrame.src = objectUrl;
+      });
+    }
+
+    function queueLiveFrameBlob(blob, options = {}) {
+      if (!blob || !blob.size) return;
+      if (liveRenderBusy) {
+        livePendingBlob = blob;
+        livePendingOptions = options;
+        return;
+      }
+      liveRenderBusy = true;
+      void renderLiveFrameBlob(blob, options)
+        .catch(() => {})
+        .finally(() => {
+          liveRenderBusy = false;
+          if (!liveMode || !livePendingBlob) {
+            livePendingBlob = null;
+            livePendingOptions = null;
+            return;
+          }
+          const nextBlob = livePendingBlob;
+          const nextOptions = livePendingOptions || {};
+          livePendingBlob = null;
+          livePendingOptions = null;
+          queueLiveFrameBlob(nextBlob, nextOptions);
+      });
+    }
+
+    function parseLiveBinaryMeta(data) {
+      if (!(data instanceof ArrayBuffer) || data.byteLength !== 52) return null;
+      const view = new DataView(data);
+      if (view.getUint8(0) !== 0x44 || view.getUint8(1) !== 0x38
+        || view.getUint8(2) !== 0x4c || view.getUint8(3) !== 0x35
+        || view.getUint32(4) !== 52) return null;
+      const u64 = (offset) => view.getUint32(offset) * 4294967296 + view.getUint32(offset + 4);
+      return {
+        type: "meta",
+        transport: "websocket-direct-binary",
+        frameId: view.getUint32(8),
+        startedAt: u64(12),
+        captureDoneAt: u64(20),
+        totalMs: view.getUint32(28),
+        captureMs: view.getUint32(32),
+        bytes: view.getUint32(36),
+        wireTotalUs: view.getUint32(40),
+        firstPacketUs: view.getUint32(44),
+        parseUs: view.getUint32(48),
+      };
+    }
+
+    function openLiveSocket() {
+      closeLiveSocket();
+      liveSocketFallback = false;
+      return new Promise((resolve) => {
+        let settled = false;
+        let socket;
+        try {
+          socket = new WebSocket(LIVE_WS_URL);
+          socket.binaryType = "arraybuffer";
+        } catch (_) {
+          liveSocketFallback = true;
+          resolve(false);
+          return;
+        }
+        liveSocket = socket;
+        const settle = (value) => {
+          if (!settled) {
+            settled = true;
+            resolve(value);
+          }
+        };
+        socket.onopen = () => {
+          if (TRACE_FRAME_PIPELINE) console.info("[frame-pipeline] ws_open", { at: performance.now(), url: LIVE_WS_URL });
+          statusSource.textContent = "bridge websocket /cgi-bin/liveview";
+          settle(true);
+        };
+        socket.onmessage = (event) => {
+          if (typeof event.data === "string") {
+            try { liveSocketPendingMeta = JSON.parse(event.data); } catch (_) { liveSocketPendingMeta = null; }
+            if (TRACE_FRAME_PIPELINE) console.info("[frame-pipeline] ws_meta", { at: performance.now(), meta: liveSocketPendingMeta });
+            return;
+          }
+          const binaryMeta = parseLiveBinaryMeta(event.data);
+          if (binaryMeta) {
+            liveSocketPendingMeta = binaryMeta;
+            if (TRACE_FRAME_PIPELINE) console.info("[frame-pipeline] ws_meta_binary", { at: performance.now(), meta: binaryMeta });
+            return;
+          }
+          const meta = liveSocketPendingMeta || {};
+          liveSocketPendingMeta = null;
+          const blob = event.data instanceof Blob
+            ? event.data
+            : new Blob([event.data], { type: "image/jpeg" });
+          if (TRACE_FRAME_PIPELINE) console.info("[frame-pipeline] ui_received", { frameId: meta.frameId ?? 0, bytes: blob.size, at: performance.now(), meta });
+          queueLiveFrameBlob(blob, meta);
+        };
+        socket.onerror = () => {
+          liveSocketFallback = true;
+          settle(false);
+        };
+        socket.onclose = () => {
+          if (!socket.__d810ExpectedClose && liveMode) {
+            liveSocketFallback = true;
+            applySessionPhaseProgressive("Preparing", "WebSocket live stream disconnected; using frame fallback", { force: true, allowAfterLock: true });
+            scheduleLiveFrame(LIVE_RETRY_DELAY_MS);
+            scheduleSessionRecovery("WebSocket disconnected", false);
+          }
+          if (liveSocket === socket) liveSocket = null;
+          settle(false);
+        };
+      });
+    }
+
+    function scheduleLiveFrame(delayMs) {
+      if (!liveMode) {
+        return;
+      }
+      if (liveLoopTimer) {
+        clearTimeout(liveLoopTimer);
+      }
+      liveLoopTimer = setTimeout(() => {
+        liveLoopTimer = null;
+        if (liveMode && !actionInFlight) {
+          void refreshFrame({ live: true, previewLabel: "live" });
+        }
+      }, Math.max(0, Number(delayMs) || 0));
+    }
+
+    function scheduleSessionRecovery(reason, immediate = false) {
+      if (sessionRecoveryInFlight || sessionRecoveryTimer) {
+        return;
+      }
+      const attempt = sessionRecoveryAttempt;
+      const delay = immediate ? 0 : Math.min(8000, 500 * (2 ** Math.min(attempt, 4)));
+      sessionRecoveryTimer = setTimeout(() => {
+        sessionRecoveryTimer = null;
+        void recoverSession(reason);
+      }, delay);
+    }
+
+    async function recoverSession(reason = "runtime health check") {
+      if (sessionRecoveryInFlight) {
+        return false;
+      }
+      if (actionInFlight) {
+        scheduleSessionRecovery(reason, false);
+        return false;
+      }
+      sessionRecoveryInFlight = true;
+      const wasLive = liveMode;
+      try {
+        applySessionPhaseProgressive("Preparing", `Recovering session: ${reason}`, { force: true, allowAfterLock: true });
+        const payload = await fetchJson(`${API.action}?action=recover`, { uiStage: "session-recovery", uiAction: "recover" });
+        if (!payload.ok) {
+          throw new Error(payload.status || "session_recovery_failed");
+        }
+        sessionRecoveryAttempt = 0;
+        startupPhaseLocked = false;
+        await refreshStatus();
+        if (wasLive && payload.liveView !== true && payload.status !== "liveview_on") {
+          // Another client (or the server) may have issued LIVE_STOP.  Recovery
+          // must honor that global stop instead of keeping a stale local intent.
+          stopLiveLoop();
+          applySessionPhaseProgressive("Ready", "Live session stopped", { force: true, allowAfterLock: true });
+          setAction("live session stopped");
+          return true;
+        }
+        if (wasLive && liveMode) {
+          closeLiveSocket();
+          const websocketReady = await openLiveSocket();
+          if (!websocketReady) {
+            liveSocketFallback = true;
+            await refreshFrame({ live: true, previewLabel: "live (recovered)" });
+          }
+          applySessionPhaseProgressive("Ready", "Live session recovered without refresh", { force: true, allowAfterLock: true });
+        } else {
+          applySessionPhaseProgressive("Ready", "Session recovered without refresh", { force: true, allowAfterLock: true });
+        }
+        setAction("session recovered");
+        return true;
+      } catch (error) {
+        sessionRecoveryAttempt += 1;
+        setAction(`recovery retry: ${String(error.message || error)}`);
+        scheduleSessionRecovery(reason, false);
+        return false;
+      } finally {
+        sessionRecoveryInFlight = false;
+      }
+    }
+
+    function pauseLiveFrameLoop() {
+      currentFrameSeq += 1;
+      if (liveLoopTimer) {
+        clearTimeout(liveLoopTimer);
+        liveLoopTimer = null;
+      }
+    }
+
+    function setPressedNode(node) {
+      if (activeControlNode && activeControlNode !== node) {
+        activeControlNode.classList.remove("pressed");
+      }
+      activeControlNode = node || null;
+      if (activeControlNode) {
+        activeControlNode.classList.add("pressed");
+      }
+    }
+
+    function clearPressedNode(node = null) {
+      if (node) {
+        node.classList.remove("pressed");
+        if (activeControlNode === node) {
+          activeControlNode = null;
+        }
+        return;
+      }
+      if (activeControlNode) {
+        activeControlNode.classList.remove("pressed");
+        activeControlNode = null;
+      }
+    }
+
+    function setBusyActionNode(node) {
+      for (const controlNode of controlNodes) {
+        controlNode.classList.toggle("busy", controlNode === node);
+        controlNode.classList.toggle("cooldown", !!node && controlNode !== node);
+      }
+    }
+
+    function clearBusyActionNode() {
+      for (const controlNode of controlNodes) {
+        controlNode.classList.remove("busy", "cooldown");
+      }
+    }
+
+    async function refreshFrame(options = {}) {
+      if (frameFetchInFlight) {
+        return false;
+      }
+      const seq = ++currentFrameSeq;
+      const requestedAt = performance.now();
+      const previewLabel = options.previewLabel || (options.live ? "live" : "manual");
+      previewState.textContent = options.live ? "live" : "manual";
+      previewMode.textContent = previewLabel;
+      statusSource.textContent = "bridge /cgi-bin/liveview";
+      frameFetchInFlight = true;
+      try {
+        const frameUrl = `${API.liveview}?ts=${Date.now()}`;
+        await loadFrameImage(frameUrl);
+        const renderedAt = performance.now();
+        if (seq !== currentFrameSeq) {
+          return;
+        }
+        currentLiveFps = pushWindowSample(liveFrameTimes, renderedAt, LIVE_STATS_WINDOW_MS);
+        currentAvgLatencyMs = pushLatencySample(liveLatencySamples, renderedAt, renderedAt - requestedAt, LIVE_STATS_WINDOW_MS);
+        updateLiveMetrics();
+        frameType.textContent = options.live ? "image/jpeg (direct live)" : "image/jpeg";
+        previewMode.textContent = previewLabel;
+        previewState.textContent = options.live ? "live" : "manual";
+        applySessionPhaseProgressive("Ready", options.live ? "The latest live frame arrived" : "The latest frame is ready", { force: true, allowAfterLock: true });
+        stampTime();
+        if ((options.live || liveMode) && liveSocketFallback) {
+          scheduleLiveFrame(LIVE_FRAME_DELAY_MS);
+        }
+        return true;
+      } catch (error) {
+        if (liveMode || options.live) {
+          applySessionPhaseProgressive("Preparing", "Recovering the frame stream", { force: true, allowAfterLock: true });
+          setAction(String(error.message || error));
+          scheduleLiveFrame(LIVE_RETRY_DELAY_MS);
+          scheduleSessionRecovery("live frame unavailable", false);
+        } else {
+          applyCameraPhaseProgressive("Detecting", "Reconnecting to the frame source", { force: true });
+          setAction(String(error.message || error));
+        }
+        return false;
+      } finally {
+        frameFetchInFlight = false;
+      }
+    }
+
+    async function runShotPreview() {
+      const retryDelays = [0, 450, 900, 1800, 3000];
+      try {
+        let lastError = null;
+        for (const delay of retryDelays) {
+          if (delay > 0) {
+            await new Promise((resolve) => setTimeout(resolve, delay));
+          }
+          const response = await fetch(`${API.capturedPreview}?t=${Date.now()}`, {
+            cache: "no-store",
+            headers: {
+              "X-D810-Client": "ui-flat",
+              "X-D810-Event": "captured-preview",
+            },
+          });
+          if (response.ok) {
+            const shotSignature = response.headers.get("X-D810-Captured-Started-At-Ms")
+              || response.headers.get("X-D810-Captured-Write-Done-At-Ms")
+              || "";
+            if (shotSignature) {
+              lastCapturedShotSignature = shotSignature;
+            }
+            const blob = await response.blob();
+            if (!blob || !blob.size) {
+              lastError = new Error("captured_preview_empty");
+              continue;
+            }
+            await storeShotPreview(blob);
+            shellStatus("Shot preview", "Latest frame refreshed");
+            setAction("shot preview ready");
+            return;
+          }
+          lastError = new Error(`captured_preview_${response.status}`);
+          if (response.status !== 404 && response.status < 500) {
+            break;
+          }
+        }
+        throw lastError || new Error("captured_preview_unavailable");
+      } catch (error) {
+        shellStatus("Shot preview", "Could not refresh the frame");
+        setAction(String(error.message || error));
+      }
+    }
+
+    function capturedShotSignature(response) {
+      return response.headers.get("X-D810-Captured-Started-At-Ms")
+        || response.headers.get("X-D810-Captured-Write-Done-At-Ms")
+        || "";
+    }
+
+    async function probeExternalShot() {
+      if (document.hidden || actionInFlight || externalShotProbeInFlight) {
+        return;
+      }
+      externalShotProbeInFlight = true;
+      try {
+        const response = await fetch(`${API.captureEvent}?probe=${Date.now()}`, {
+          cache: "no-store",
+          headers: { "X-D810-Client": "ui-flat", "X-D810-Event": "shot-probe" },
+        });
+        if (!response.ok) {
+          return;
+        }
+        const payload = await response.json();
+        const eventSeq = Number(payload.captureEventSeq);
+        if (!Number.isFinite(eventSeq)) {
+          return;
+        }
+        if (lastCaptureEventSeq == null || eventSeq < lastCaptureEventSeq) {
+          lastCaptureEventSeq = eventSeq;
+          return;
+        }
+        if (eventSeq !== lastCaptureEventSeq) {
+          lastCaptureEventSeq = eventSeq;
+          shellStatus("External shutter", "Refreshing the latest frame");
+          setAction("external shutter detected");
+          await runShotPreview();
+        }
+      } catch (_) {
+        // The normal status/recovery loop owns connection errors.
+      } finally {
+        externalShotProbeInFlight = false;
+      }
+    }
+
+    function scheduleExternalShotProbe() {
+      if (externalShotTimer) {
+        clearTimeout(externalShotTimer);
+      }
+      const tick = async () => {
+        await probeExternalShot();
+        externalShotTimer = setTimeout(tick, 1600);
+      };
+      externalShotTimer = setTimeout(tick, 900);
+    }
+
+    async function refreshStatus() {
+      try {
+        const data = await fetchJson(API.status);
+        const cameraObjectSignature = `${data.objectHandle || ""}|${data.objectName || ""}`;
+        if (cameraObjectSignature !== "|") {
+          if (!lastCameraObjectSignature) {
+            lastCameraObjectSignature = cameraObjectSignature;
+          } else if (cameraObjectSignature !== lastCameraObjectSignature && !actionInFlight) {
+            lastCameraObjectSignature = cameraObjectSignature;
+            previewMode.textContent = "shot";
+            shellStatus("External shutter", "Refreshing the latest frame");
+            setAction("external shutter detected");
+            void runShotPreview();
+          } else {
+            lastCameraObjectSignature = cameraObjectSignature;
+          }
+        }
+        if (typeof data.batteryPercent === "number") {
+          setBatteryLevel(data.batteryPercent);
+        } else if (typeof data.batteryLevel === "number") {
+          setBatteryLevel(data.batteryLevel);
+        }
+        const cameraPhase = (typeof data.cameraPhase === "string" && data.cameraPhase)
+          ? { phase: data.cameraPhase, detail: String(data.cameraDetail || "") }
+          : deriveCameraPhase(data, { live: liveMode || data.liveView });
+        const sessionPhase = (typeof data.sessionPhase === "string" && data.sessionPhase)
+          ? { phase: data.sessionPhase, detail: String(data.sessionDetail || "") }
+          : deriveSessionPhase(data, { live: liveMode || data.liveView });
+        const backendState = String(data.backendState || "");
+        const softwareReady = data.softwareReady === true
+          || data.status === "ready"
+          || data.status === "liveview_on";
+        if (backendState === "degraded" || backendState === "recovering" || data.status === "bridge_unavailable") {
+          scheduleSessionRecovery(`backend ${backendState || data.status}`, false);
+        }
+        const identity = formatSessionIdentity(data);
+        applyCameraPhaseProgressive(cameraPhase.phase, cameraPhase.detail);
+        if (identity) {
+          setSessionIdentity(identity);
+        }
+        if (!startupPhaseLocked) {
+          if ((softwareReady || sessionPhase.phase === "Ready") && backendState !== "recovering" && backendState !== "degraded") {
+            applySessionPhaseProgressive("Ready", sessionPhase.detail || "Live view and commands are ready right away", { force: true });
+            startupPhaseLocked = true;
+          } else if (liveMode || data.liveView) {
+            if (backendState === "recovering" || backendState === "degraded" || sessionPhase.phase !== "Ready") {
+              applySessionPhaseProgressive(sessionPhase.phase, sessionPhase.detail, { force: true });
+            } else {
+              applySessionPhaseProgressive("Ready", sessionPhase.detail || "Live view and commands are ready right away", { force: true });
+              startupPhaseLocked = true;
+            }
+          } else {
+            applyCameraPhaseProgressive(cameraPhase.phase, cameraPhase.detail);
+            applySessionPhaseProgressive(sessionPhase.phase, sessionPhase.detail);
+          }
+        }
+        previewState.textContent = data.liveView || liveMode ? "live" : "manual";
+      } catch (error) {
+        if (!startupPhaseLocked) {
+          applyCameraPhaseProgressive(liveMode ? "Connect" : "Detecting", liveMode ? "Checking live status" : "Checking service status", { force: true });
+          applySessionPhaseProgressive("Preparing", liveMode ? "Checking live status" : "Checking service status", { force: true });
+        }
+        setAction(String(error.message || error));
+        scheduleSessionRecovery("status request failed", false);
+      }
+    }
+
+    function statusRefreshDelay() {
+      if (currentSessionPhase === "Ready") {
+        return STATUS_REFRESH_INTERVAL_MS;
+      }
+      return TRANSIENT_STATUS_REFRESH_INTERVAL_MS;
+    }
+
+    function scheduleStatusRefresh() {
+      if (statusRefreshTimer) {
+        clearTimeout(statusRefreshTimer);
+      }
+      const tick = async () => {
+        if (!document.hidden && !actionInFlight) {
+          await refreshStatus();
+        }
+        statusRefreshTimer = setTimeout(tick, statusRefreshDelay());
+      };
+      statusRefreshTimer = setTimeout(tick, statusRefreshDelay());
+    }
+
+    function stopLiveLoop() {
+      liveMode = false;
+      closeLiveSocket();
+      if (liveLoopTimer) {
+        clearTimeout(liveLoopTimer);
+        liveLoopTimer = null;
+      }
+      previewMode.textContent = "idle";
+      previewState.textContent = "manual";
+      resetLiveMetrics();
+      applySessionPhaseProgressive("Ready", "Live view stopped and the camera is back in standby", { force: true, allowAfterLock: true });
+    }
+
+    async function ensureLiveviewOn() {
+      const payload = await fetchJson(`${API.action}?action=live-on`);
+      if (!payload.ok && payload.status !== "liveview_on") {
+        throw new Error(payload.status || "liveview_on_failed");
+      }
+      return payload;
+    }
+
+    async function startLiveLoop() {
+      liveMode = true;
+      previewMode.textContent = "live";
+      previewState.textContent = "live";
+      resetLiveMetrics();
+      applySessionPhaseProgressive("Preparing", "Starting the live session", { force: true, allowAfterLock: true });
+      try {
+        await ensureLiveviewOn();
+        if (LIVE_INITIAL_DELAY_MS > 0) {
+          await new Promise((resolve) => setTimeout(resolve, LIVE_INITIAL_DELAY_MS));
+        }
+        const websocketReady = await openLiveSocket();
+        if (!websocketReady) {
+          liveSocketFallback = true;
+          await fetchJson(`${API.action}?action=live-fallback`).catch(() => null);
+          await refreshFrame({ live: true, previewLabel: "live (fallback)" });
+        }
+        applySessionPhaseProgressive("Ready", "Live session is ready", { force: true, allowAfterLock: true });
+        return true;
+      } catch (error) {
+        stopLiveLoop();
+        setAction(`live start failed: ${String(error.message || error)}`);
+        scheduleSessionRecovery("live start failed", true);
+        return false;
+      }
+    }
+
+    async function runAction(action, node = null, uiAt = Date.now()) {
+      if (editMode) {
+        return;
+      }
+      if (actionInFlight) {
+        setAction(`busy: ${action}`);
+        return;
+      }
+      actionInFlight = true;
+      currentActionController = new AbortController();
+      applySessionPhaseProgressive("Preparing", "Processing command", { force: true, allowAfterLock: true });
+      actionStartedAt = performance.now();
+      setBusyActionNode(node);
+      if (action === "live-on") {
+        setAction("Starting live preview");
+        try {
+          if (await startLiveLoop()) {
+            setAction(actionMessages[action]);
+          }
+        } finally {
+          clearBusyActionNode();
+          actionInFlight = false;
+          currentActionController = null;
+        }
+        return;
+      }
+      if (action === "live-off") {
+        // Fence client recovery before the server closes the stream.  If the
+        // socket closes while liveMode is still true, onclose can race STOP
+        // and issue RECOVER/LIVE_START again.
+        stopLiveLoop();
+        try {
+          await fetchJson(`${API.action}?action=live-off&uiAt=${encodeURIComponent(uiAt)}`);
+        } catch (_) {}
+        setAction(actionMessages[action]);
+        clearBusyActionNode();
+        actionInFlight = false;
+        currentActionController = null;
+        return;
+      }
+      const keepLiveForCameraAction = ["af", "shutter"].includes(action);
+      const keepLiveForSessionMaintenance = action === "maintain";
+      const shouldStopLive = action !== "live-on" && action !== "live-off" && action !== "reset" && !keepLiveForCameraAction && liveMode && !keepLiveForSessionMaintenance;
+      if (shouldStopLive) {
+        stopLiveLoop();
+        try {
+          const liveStopPayload = await fetchJson(`${API.action}?action=live-off&uiAt=${encodeURIComponent(uiAt)}`, {
+            controller: currentActionController,
+            uiAt,
+            uiStage: "live-stop-before-command",
+            uiAction: action,
+          });
+          if (!liveStopPayload.ok && liveStopPayload.status !== "liveview_off") {
+            throw new Error(liveStopPayload.status || "live_stop_failed");
+          }
+        } catch (error) {
+          setAction(`${action} blocked: live stop failed`);
+          clearBusyActionNode();
+          actionInFlight = false;
+          currentActionController = null;
+          return;
+        }
+      }
+      shellStatus("Sending command", actionMessages[action] || action);
+      try {
+        const payload = await fetchJson(`${API.action}?action=${encodeURIComponent(action)}&uiAt=${encodeURIComponent(uiAt)}`, {
+          controller: currentActionController,
+          uiAt,
+          uiStage: "action-request",
+          uiAction: action,
+        });
+        if (!payload.ok && payload.status === "camera_busy") {
+          shellStatus("Camera busy", "Wait a moment and try again");
+          setAction(`${action}: camera_busy`);
+          applySessionPhaseProgressive("Preparing", payload.sessionCondition || "Preparing", { force: true, allowAfterLock: true });
+          startupPhaseLocked = false;
+          await refreshStatus();
+          return;
+        }
+        if (payload.status === "camera_missing") {
+          setAction(`${action}: camera_missing`);
+          applySessionPhaseProgressive("Preparing", payload.sessionCondition || "Preparing", { force: true, allowAfterLock: true });
+          startupPhaseLocked = false;
+          await refreshStatus();
+          return;
+        }
+        if (payload.status === "unknown") {
+          throw new Error(`unknown action: ${action}`);
+        }
+        if (typeof payload.batteryPercent === "number") {
+          setBatteryLevel(payload.batteryPercent);
+        }
+        applySessionPhaseProgressive("Ready", payload.sessionCondition || "Ready", { force: true, allowAfterLock: true });
+        const elapsed = Math.max(0, Math.round(performance.now() - actionStartedAt));
+        setAction(`${payload.action || action}: ${payload.status || "ok"} (${elapsed}ms)`);
+        startupPhaseLocked = false;
+        if (action === "shutter") {
+          previewMode.textContent = "shot";
+          shellStatus("Shot complete", "Refreshing the preview after capture");
+          void runShotPreview();
+        }
+        await refreshStatus();
+      } catch (error) {
+        shellStatus("Command failed", "Rechecking the current state");
+        setAction(`${action} failed: ${String(error.message || error)}`);
+        scheduleSessionRecovery(`${action} command failed`, true);
+        startupPhaseLocked = false;
+        await refreshStatus();
+      } finally {
+        clearBusyActionNode();
+        actionInFlight = false;
+        currentActionController = null;
+      }
+    }
+
+    async function killCurrentCommand(node = null) {
+      if (editMode || !node) {
+        return;
+      }
+      if (currentActionController) {
+        currentActionController.abort();
+      }
+      setBusyActionNode(node);
+      pauseLiveFrameLoop();
+      liveMode = false;
+      stopLiveLoop();
+      previewMode.textContent = "idle";
+      previewState.textContent = "manual";
+      shellStatus("Stopping command", "Cleaning the session; replacing it only if needed");
+      setAction("killing current command");
+      try {
+        actionInFlight = false;
+        await fetchJson(`${API.action}?action=reset`);
+        applySessionPhaseProgressive("Preparing", "Restarting after a command kill", { force: true, allowAfterLock: true });
+        startupPhaseLocked = false;
+        await refreshStatus();
+        setAction(actionMessages.reset);
+      } catch (error) {
+        setAction(`reset failed: ${String(error.message || error)}`);
+        startupPhaseLocked = false;
+        await refreshStatus();
+      } finally {
+        currentActionController = null;
+        clearBusyActionNode();
+        actionInFlight = false;
+      }
+    }
+
+    async function traceNodeEvent(node, stage, uiAt = Date.now()) {
+      if (!node || editMode) {
+        return;
+      }
+      await fetchJson(`${API.action}?action=trace&target=${encodeURIComponent(node.dataset.action || "")}&stage=${encodeURIComponent(stage)}&uiAt=${encodeURIComponent(uiAt)}`, {
+        uiAt,
+        uiStage: stage,
+        uiAction: node.dataset.action || "",
+      }).catch(() => null);
+    }
+
+    function setupLandscapeShutterSlider(node) {
+      const maxSlide = 99;
+      const triggerDistance = maxSlide * 0.78;
+      let pointerId = null;
+      let startX = 0;
+      let slideX = 0;
+
+      const resetSlider = () => {
+        pointerId = null;
+        slideX = 0;
+        node.style.setProperty("--slide-x", "0px");
+        node.classList.remove("is-dragging", "is-ready");
+        const label = node.querySelector("strong");
+        if (label) label.textContent = "AF";
+      };
+
+      node.addEventListener("pointerdown", (event) => {
+        if (editMode || actionInFlight) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        pointerId = event.pointerId;
+        startX = event.clientX - slideX;
+        node.classList.add("is-dragging");
+        node.setPointerCapture(event.pointerId);
+      }, true);
+
+      node.addEventListener("pointermove", (event) => {
+        if (event.pointerId !== pointerId || editMode) return;
+        event.preventDefault();
+        slideX = Math.max(0, Math.min(maxSlide, event.clientX - startX));
+        node.style.setProperty("--slide-x", `${slideX}px`);
+        node.classList.toggle("is-ready", slideX >= triggerDistance);
+        const label = node.querySelector("strong");
+        if (label) label.textContent = slideX >= triggerDistance ? "SHOT" : "AF";
+      }, true);
+
+      const finishSlider = (event) => {
+        if (event.pointerId !== pointerId || editMode) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const moved = slideX;
+        const uiAt = Date.now();
+        if (node.hasPointerCapture(event.pointerId)) node.releasePointerCapture(event.pointerId);
+        resetSlider();
+        if (actionInFlight) return;
+        node.dataset.lastActionAt = String(uiAt);
+        const action = moved >= triggerDistance ? "shutter" : moved < 8 ? "af" : null;
+        if (!action) return;
+        setPressedNode(node);
+        shellStatus("Command armed", actionMessages[action]);
+        setAction(`sending ${action}`);
+        void traceNodeEvent(node, "slider", uiAt);
+        void runAction(action, node, uiAt);
+      };
+
+      node.addEventListener("pointerup", finishSlider, true);
+      node.addEventListener("pointercancel", finishSlider, true);
+    }
+
+    const landscapeShutterNode = document.querySelector('[data-id="landscapeShutter"]');
+    if (landscapeShutterNode) setupLandscapeShutterSlider(landscapeShutterNode);
+
+    for (const node of controlNodes) {
+      node.addEventListener("pointerdown", beginDrag);
+      node.addEventListener("pointermove", moveDrag);
+      node.addEventListener("pointerup", endDrag);
+      node.addEventListener("pointercancel", endDrag);
+      node.addEventListener("pointerdown", async (event) => {
+        if (editMode) {
+          return;
+        }
+        if (node.classList.contains("landscape-af11")) {
+          return;
+        }
+        if (actionInFlight) {
+          event.preventDefault();
+          setAction(`busy: ${node.dataset.action}`);
+          return;
+        }
+        const uiAt = Date.now();
+        node.dataset.lastActionAt = String(uiAt);
+        activePointerId = event.pointerId;
+        setPressedNode(node);
+        shellStatus("Command armed", actionMessages[node.dataset.action] || node.dataset.action);
+        setAction(`sending ${node.dataset.action}`);
+        event.preventDefault();
+        void traceNodeEvent(node, "pointerdown", uiAt);
+        if (node.dataset.action === "reset") {
+          shellStatus("Kill command armed", "Cleaning the session; replacing it only if needed");
+          setAction("sending reset");
+          await killCurrentCommand(node);
+        } else {
+          await runAction(node.dataset.action, node, uiAt);
+        }
+      });
+      node.addEventListener("pointerup", (event) => {
+        if (editMode) {
+          return;
+        }
+        if (activePointerId === event.pointerId) {
+          activePointerId = null;
+        }
+        clearPressedNode(node);
+      });
+      node.addEventListener("pointercancel", (event) => {
+        if (editMode) {
+          return;
+        }
+        if (activePointerId === event.pointerId) {
+          activePointerId = null;
+        }
+        clearPressedNode(node);
+      });
+      node.addEventListener("click", (event) => {
+        if (editMode) {
+          event.preventDefault();
+          return;
+        }
+        const uiAt = Date.now();
+        if (actionInFlight) {
+          event.preventDefault();
+          setAction(`busy: ${node.dataset.action}`);
+          return;
+        }
+        if (node.classList.contains("landscape-af11")) {
+          event.preventDefault();
+          return;
+        }
+        const lastActionAt = Number(node.dataset.lastActionAt || 0);
+        if (Number.isFinite(lastActionAt) && (Date.now() - lastActionAt) < 600) {
+          event.preventDefault();
+          return;
+        }
+        node.dataset.lastActionAt = String(Date.now());
+        setPressedNode(node);
+        shellStatus("Command armed", actionMessages[node.dataset.action] || node.dataset.action);
+        setAction(`sending ${node.dataset.action}`);
+        event.preventDefault();
+        void traceNodeEvent(node, "click", uiAt);
+        if (node.dataset.action === "reset") {
+          shellStatus("Kill command armed", "Cleaning the session; replacing it only if needed");
+          setAction("sending reset");
+          void killCurrentCommand(node);
+        } else {
+          void runAction(node.dataset.action, node, uiAt);
+        }
+      });
+    }
+
+    // SETTINGS OVERLAY: presentation and local interaction prototype only.
+    function setLandscapeSettingsOpen(open) {
+      landscapeSettingsOverlay.hidden = !open;
+      landscapeSettingsOverlay.classList.toggle("is-open", open);
+      if (landscapeOpenSettings) landscapeOpenSettings.setAttribute("aria-expanded", String(open));
+      if (landscapeExit) landscapeExit.setAttribute("aria-expanded", String(open));
+    }
+
+    landscapeOpenSettings.addEventListener("click", () => setLandscapeSettingsOpen(true));
+    landscapeCloseSettings.addEventListener("click", () => setLandscapeSettingsOpen(false));
+    landscapeSettingsOverlay.addEventListener("click", (event) => {
+      if (event.target === landscapeSettingsOverlay) {
+        setLandscapeSettingsOpen(false);
+      }
+    });
+    document.querySelectorAll("[data-priority]").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll("[data-priority]").forEach((item) => item.classList.remove("is-selected"));
+        button.classList.add("is-selected");
+      });
+    });
+    document.querySelectorAll("[data-value-cycle]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const key = button.dataset.valueCycle;
+        const values = landscapeSettingCycles[key] || [];
+        if (!values.length) return;
+        landscapeSettingCycleIndex[key] = (landscapeSettingCycleIndex[key] + 1) % values.length;
+        button.textContent = values[landscapeSettingCycleIndex[key]];
+      });
+    });
+    document.querySelectorAll("[data-focus-move]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const step = 8;
+        if (button.dataset.focusMove === "left") landscapeFocusPosition.x -= step;
+        if (button.dataset.focusMove === "right") landscapeFocusPosition.x += step;
+        if (button.dataset.focusMove === "up") landscapeFocusPosition.y -= step;
+        if (button.dataset.focusMove === "down") landscapeFocusPosition.y += step;
+        landscapeFocusPosition.x = Math.max(12, Math.min(88, landscapeFocusPosition.x));
+        landscapeFocusPosition.y = Math.max(12, Math.min(88, landscapeFocusPosition.y));
+        landscapeFocusCrosshair.style.left = `${landscapeFocusPosition.x}%`;
+        landscapeFocusCrosshair.style.top = `${landscapeFocusPosition.y}%`;
+      });
+    });
+    landscapeFocusMode.addEventListener("click", () => {
+      landscapeFocusMode.textContent = landscapeFocusMode.textContent === "AF-S" ? "AF-C" : "AF-S";
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !landscapeSettingsOverlay.hidden) setLandscapeSettingsOpen(false);
+    });
+
+    toggleEdit.addEventListener("click", () => setEditMode(!editMode));
+    saveLayout.addEventListener("click", () => {
+      persistLayout(currentLayout());
+      layoutNotice.textContent = "Layout saved";
+      shellStatus("Layout saved", "Your button map will stay here");
+    });
+    landscapeToggleEdit.addEventListener("click", () => setEditMode(!editMode));
+    landscapeSaveLayout.addEventListener("click", () => {
+      persistLayout(currentLayout());
+      layoutNotice.textContent = "Layout saved";
+      shellStatus("Layout saved", "Your button map will stay here");
+    });
+    shotThumbImage.addEventListener("click", () => {
+      if (shotThumbImage.hidden || !shotThumbImage.src) {
+        return;
+      }
+      if (shotViewer.hidden) {
+        void showShotViewer();
+      } else {
+        hideShotViewer();
+      }
+    });
+    shotViewer.addEventListener("click", (event) => {
+      if (event.target === shotViewer) {
+        void hideShotViewer();
+      }
+    });
+    shotViewerImage.addEventListener("click", () => void hideShotViewer());
+    shotViewerClose.addEventListener("click", () => void hideShotViewer());
+    document.addEventListener("fullscreenchange", () => {
+      if (!document.fullscreenElement && !shotViewer.hidden) {
+        shotViewer.hidden = false;
+      }
+    });
+
+    window.addEventListener("error", (event) => {
+      shellStatus("UI error", "An unexpected error happened");
+      setAction(event.message || "runtime error");
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      shellStatus("UI error", "Promise rejected");
+      setAction(String(event.reason?.message || event.reason || "promise rejected"));
+    });
+    window.addEventListener("focus", () => {
+      void refreshStatus();
+    });
+    window.addEventListener("pageshow", () => {
+      void refreshStatus();
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        void refreshStatus();
+      }
+    });
+
+    applyLayout(loadLayout());
+    clearVolatileInspectionState();
+    drawPlaceholder();
+    setAction("Booting the UI, please wait");
+    stampTime();
+    setSessionIdentity("---");
+    applyCameraPhaseProgressive("Detecting", "Checking whether the camera is attached", { force: true });
+    applySessionPhaseProgressive("Preparing", "Checking whether the session is ready", { force: true });
+    (async () => {
+      // Every page boot owns a fresh camera session.  Do not rely on the
+      // browser's navigation type; it is unavailable or unreliable in some
+      // embedded/WebView reload paths.
+      const bootUrl = `/cgi-bin/session-manager?boot=${BOOT_TOKEN}&reset=1`;
+      await fetchJson(bootUrl).catch(() => null);
+      await fetchJson(`${API.action}?action=live-off&boot=${BOOT_TOKEN}`).catch(() => null);
+      stopLiveLoop();
+      await refreshStatus();
+      stampTime();
+    })();
+    const landscapeExit = document.getElementById("landscapeExit");
+    let portraitRedirectTimer = null;
+
+    function isPortraitViewport() {
+      return window.matchMedia("(orientation: portrait)").matches || window.innerHeight >= window.innerWidth;
+    }
+
+    function syncPortraitUi() {
+      if (!isPortraitViewport()) {
+        return;
+      }
+      window.location.replace("/remote-ui/0716-1.1.html?from=landscape");
+    }
+
+    function schedulePortraitUiSync() {
+      window.clearTimeout(portraitRedirectTimer);
+      portraitRedirectTimer = window.setTimeout(syncPortraitUi, 120);
+    }
+
+    landscapeExit.addEventListener("click", () => {
+      setLandscapeSettingsOpen(landscapeSettingsOverlay.hidden);
+    });
+    window.addEventListener("orientationchange", schedulePortraitUiSync, { passive: true });
+    window.addEventListener("resize", schedulePortraitUiSync, { passive: true });
+    schedulePortraitUiSync();
+
+    scheduleStatusRefresh();
+    scheduleExternalShotProbe();
+  </script>
+</body>
+</html>
