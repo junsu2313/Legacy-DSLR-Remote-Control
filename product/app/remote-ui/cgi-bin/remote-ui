@@ -1,0 +1,6 @@
+#!/bin/sh
+printf 'Status: 302 Found\r\n'
+printf 'Location: /remote-ui/0716-1.1.html\r\n'
+printf 'Cache-Control: no-store\r\n'
+printf 'Content-Type: text/plain\r\n\r\n'
+printf 'Redirecting to /remote-ui/0716-1.1.html\n'

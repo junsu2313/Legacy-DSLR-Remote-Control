@@ -1,0 +1,84 @@
+CAMERA.USB_NOT_DETECTED	카메라 전원과 USB 연결을 확인해 주세요.
+CAMERA.HARDWARE_NOT_RECOGNIZED	연결된 카메라가 Nikon D810인지 확인해 주세요.
+CAMERA.DEVICE_SELECTION_FAILED	카메라 장치 선택 상태를 확인해 주세요.
+CAMERA.PTP_OPEN_REJECTED	카메라 연결을 다시 확인한 뒤 전원을 재시작해 주세요.
+CAMERA.RESPONSE_ERROR	카메라가 명령을 거부했습니다.
+CAMERA.CONTROL_OWNERSHIP_CONFLICT	카메라를 사용 중인 다른 프로그램을 종료해 주세요.
+POWER.LOW_BATTERY	배터리를 충전하거나 교체해 주세요.
+POWER.BATTERY_UNREADABLE	카메라 배터리 상태를 다시 확인해 주세요.
+POWER.BATTERY_STALE	카메라에 배터리 상태를 다시 물어봐야 합니다.
+POWER.CAMERA_POWER_LOST	카메라 전원과 USB 연결이 끊겼습니다.
+STORAGE.CARD_UNAVAILABLE	카메라의 SD카드를 확인해 주세요.
+STORAGE.INFO_UNAVAILABLE	SD카드 정보를 읽을 수 없습니다.
+STORAGE.OBJECT_LIST_FAILED	카메라 파일 목록을 읽을 수 없습니다.
+STORAGE.OBJECT_INFO_FAILED	선택한 파일 정보를 읽을 수 없습니다.
+CAPTURE.NO_NEW_OBJECT	새 촬영 파일이 확인되지 않았습니다.
+CAPTURE.JPEG_NOT_FOUND	촬영된 JPEG 파일을 찾을 수 없습니다.
+CAPTURE.NEF_NOT_FOUND	촬영된 NEF 파일을 찾을 수 없습니다.
+CAPTURE.THUMB_UNAVAILABLE	썸네일을 사용할 수 없어 원본 경로를 확인합니다.
+CAPTURE.OBJECT_BUSY	파일 전송이 끝날 때까지 잠시 기다려 주세요.
+CAPTURE.CHUNK_EMPTY	파일 전송 중 빈 데이터가 발생했습니다.
+CAPTURE.SIZE_MISMATCH	파일 크기가 맞지 않아 전송을 다시 확인해야 합니다.
+CAPTURE.JPEG_INVALID	전달된 JPEG 파일이 손상되었습니다.
+CAPTURE.SETTING_REJECTED	카메라 촬영 설정을 확인해 주세요.
+RUNTIME.DDSERVER_STOPPED	카메라 전송 서비스를 다시 시작해야 합니다.
+RUNTIME.BRIDGE_STOPPED	카메라 브리지 서비스를 다시 시작해야 합니다.
+RUNTIME.DUPLICATE_OWNER	중복 실행 중인 카메라 제어 프로세스를 정리합니다.
+RUNTIME.STALE_LOCK	오래된 작업 잠금을 정리한 뒤 다시 확인합니다.
+RUNTIME.DEPENDENCY_UNAVAILABLE	필수 카메라 런타임을 사용할 수 없습니다.
+PTP.CONNECT_FAILED	PTP 전송 연결을 다시 확인합니다.
+PTP.SESSION_UNAVAILABLE	PTP 세션을 열 수 없습니다.
+PTP.SESSION_LOST	카메라 PTP 세션이 끊겼습니다.
+PTP.WRITE_FAILED	PTP 요청을 카메라로 보내지 못했습니다.
+PTP.READ_TIMEOUT	카메라 응답을 기다리는 시간이 초과되었습니다.
+PTP.CONTAINER_INVALID	카메라 응답 형식이 올바르지 않습니다.
+PTP.PACKET_LENGTH_INVALID	PTP 패킷 길이가 올바르지 않습니다.
+PTP.TRANSPORT_CLOSED	PTP 전송 연결이 닫혔습니다.
+PTP.PROBE_FAILED	카메라 상태 확인에 실패했습니다.
+SESSION.CAPABILITY_UNCERTIFIED	카메라 기능 인증이 아직 끝나지 않았습니다.
+SESSION.REQUIRED_PROPERTY_MISSING	카메라 필수 속성을 확인할 수 없습니다.
+SESSION.STORAGE_CERTIFICATION_FAILED	카메라 저장장치 인증에 실패했습니다.
+COMMAND.BUSY	카메라가 처리 중이어서 잠시 기다립니다.
+COMMAND.BUSY_EXHAUSTED	카메라가 계속 처리 중이라 명령을 중단했습니다.
+COMMAND.ROUTE_NOT_READY	카메라 명령 경로가 준비되지 않았습니다.
+COMMAND.APP_NOT_READY	앱 준비가 끝날 때까지 명령을 기다려 주세요.
+COMMAND.CAMERA_REJECTED	카메라가 해당 명령을 거부했습니다.
+COMMAND.AMBIGUOUS_CAPTURE_RESULT	촬영 결과가 불명확해 재촬영하지 말고 파일을 확인해 주세요.
+RUNTIME.WEBSOCKET_STOPPED	라이브뷰 전송 서비스를 다시 시작해야 합니다.
+SESSION.LV_CERTIFICATION_FAILED	라이브뷰 기능 인증에 실패했습니다.
+LV.BLOCKED_LOW_BATTERY	배터리 부족으로 라이브뷰가 제한되었습니다.
+LV.CAMERA_STATE_MISMATCH	카메라와 앱의 라이브뷰 상태가 다릅니다.
+LV.START_BUSY	라이브뷰 시작 처리가 아직 진행 중입니다.
+LV.START_FAILED	라이브뷰를 시작하지 못했습니다.
+LV.RESTORE_FAILED	라이브뷰 상태를 복원하지 못했습니다.
+LV.STOP_FAILED	라이브뷰를 종료하지 못했습니다.
+LV.FRAME_EMPTY	라이브뷰 프레임이 비어 있습니다.
+LV.FRAME_NOT_JPEG	라이브뷰 프레임 형식이 JPEG가 아닙니다.
+LV.FRAME_STALE	라이브뷰 프레임이 갱신되지 않고 있습니다.
+LV.FRAME_LOCK_TIMEOUT	라이브뷰 프레임 잠금이 해제되지 않았습니다.
+LV.FRAME_CACHE_WRITE_FAILED	라이브뷰 프레임을 캐시에 저장하지 못했습니다.
+DELIVERY.WS_UNAVAILABLE	라이브뷰 WebSocket 전송을 사용할 수 없습니다.
+DELIVERY.FRAME_NOT_PUBLISHED	라이브뷰 프레임이 앱으로 발행되지 않았습니다.
+DELIVERY.DIRECT_STREAM_FAILED	라이브뷰 직접 전송에 실패했습니다.
+DELIVERY.FALLBACK_ACTIVE	라이브뷰가 제한된 대체 경로로 전송되고 있습니다.
+RUNTIME.BATTERY_WORKER_STOPPED	배터리 상태 갱신 작업이 중단되었습니다.
+RUNTIME.SESSION_HEALTH_STOPPED	세션 상태 감시 작업이 중단되었습니다.
+RUNTIME.GUARDIAN_STOPPED	자동 복구 감시 작업이 중단되었습니다.
+RUNTIME.START_LOCK_BUSY	다른 시작 작업이 끝날 때까지 기다립니다.
+RUNTIME.BOOT_BUSY	앱 시작 작업이 아직 진행 중입니다.
+SESSION.CLIENT_ID_MISSING	앱 세션 식별자가 없습니다.
+SESSION.CLIENT_ID_STALE	앱 세션 식별자가 오래되었습니다.
+SESSION.READINESS_CONTRACT_FAILED	카메라 준비 상태 계약을 만족하지 못했습니다.
+SESSION.RECOVERY_EXHAUSTED	자동 복구를 모두 수행했지만 상태가 남아 있습니다.
+DELIVERY.CLIENT_DISCONNECTED	앱 연결이 끊겼습니다.
+DELIVERY.WIFI_UNREACHABLE	Wi-Fi에서 Opal에 연결할 수 없습니다.
+DELIVERY.HTTP_UNREACHABLE	Opal 상태 API에 연결할 수 없습니다.
+APP.STATUS_SINGLE_TIMEOUT	상태 응답이 늦어 다시 확인합니다.
+APP.STATUS_UNAVAILABLE	앱에서 카메라 상태를 확인할 수 없습니다.
+APP.CONTRACT_PARSE_FAILED	앱과 카메라의 상태 형식이 맞지 않습니다.
+APP.WS_RECONNECTING	라이브뷰 연결을 다시 시도하고 있습니다.
+APP.FRAME_DECODE_FAILED	라이브뷰 프레임을 해석하지 못했습니다.
+APP.RENDER_STALLED	라이브뷰 화면 갱신이 멈췄습니다.
+APP.FRAME_QUEUE_PRESSURE	프레임 처리량이 표시 속도를 초과했습니다.
+APP.FPS_DEGRADED	라이브뷰 표시 속도가 낮아졌습니다.
+APP.VERSION_MISMATCH	앱과 Opal의 버전이 맞지 않습니다.

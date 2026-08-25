@@ -1,0 +1,328 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+
+SCRIPT_DIR=$(dirname "$0")
+. "$SCRIPT_DIR/variant-v21-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+
+DDSERVER_BIN=${D810D_DDSERVER_BIN:-/usr/bin/ddserver}
+SESSION_MANAGER_URL=${D810D_SESSION_MANAGER_URL:-http://127.0.0.1/cgi-bin/session-manager}
+RUNTIME_FAULT_STATE=${D810D_RUNTIME_FAULT_STATE:-/tmp/d810-runtime-fault.state}
+DIAGNOSTIC_CATALOG=${D810D_DIAGNOSTIC_CATALOG:-$SCRIPT_DIR/diagnostic-catalog.tsv}
+DIAGNOSTIC_LOG=${D810D_DIAGNOSTIC_LOG:-/root/d810-diagnostics.log}
+DIAGNOSTIC_LOG_MAX_BYTES=${D810D_DIAGNOSTIC_LOG_MAX_BYTES:-1048576}
+MODE=${1:-auto}
+
+camera_usb_path() {
+  for device in /sys/bus/usb/devices/*; do
+    [ -r "$device/idVendor" ] || continue
+    [ -r "$device/idProduct" ] || continue
+    [ "$(cat "$device/idVendor" 2>/dev/null)" = "04b0" ] || continue
+    [ "$(cat "$device/idProduct" 2>/dev/null)" = "0436" ] || continue
+    printf '%s' "$device"
+    return 0
+  done
+  return 1
+}
+
+count_processes() {
+  pattern=$1
+  ps w | grep -F "$pattern" | grep -v grep | awk 'END { print NR + 0 }'
+}
+
+status_ready() {
+  ready_payload=$1
+  case "$ready_payload" in *'"ok":true'*) ;; *) return 1 ;; esac
+  case "$ready_payload" in *'"appReady":true'*) ;; *) return 1 ;; esac
+  case "$ready_payload" in *'"transportReady":true'*) ;; *) return 1 ;; esac
+  return 0
+}
+
+status_limited() {
+  limited_payload=$1
+  case "$limited_payload" in
+    *'"liveViewLimited":true'*|*'"limitationActive":true'*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+diagnosis_log() {
+  diagnosis_line="[diagnose-recover][$(now_ms)] $1"
+  if [ -n "${BRIDGE_LOG:-}" ]; then
+    printf '%s\n' "$diagnosis_line" >> "$BRIDGE_LOG"
+  fi
+  if [ -n "$DIAGNOSTIC_LOG" ]; then
+    if [ -r "$DIAGNOSTIC_LOG" ]; then
+      diagnostic_size=$(wc -c < "$DIAGNOSTIC_LOG" 2>/dev/null || printf 0)
+    else
+      diagnostic_size=0
+    fi
+    [ "${diagnostic_size:-0}" -le "$DIAGNOSTIC_LOG_MAX_BYTES" ] || mv -f "$DIAGNOSTIC_LOG" "$DIAGNOSTIC_LOG.1" 2>/dev/null || true
+    printf '%s\n' "$diagnosis_line" >> "$DIAGNOSTIC_LOG"
+  fi
+}
+
+diagnosis_message() {
+  diagnosis_id=$1
+  message=$(awk -F '\t' -v id="$diagnosis_id" '$1 == id { print $2; exit }' "$DIAGNOSTIC_CATALOG" 2>/dev/null || true)
+  if [ -n "$message" ]; then
+    printf '%s' "$message"
+  else
+    printf '진단 결과(%s)를 확인해 주세요.' "$diagnosis_id"
+  fi
+}
+
+current_status() {
+  bridge_alive || return 1
+  bridge_request_timed STATUS 5 2>/dev/null || true
+}
+
+request_treatment() {
+  treatment_code=$1
+  diagnosis_log "phase=treatment-request diagnosisId=$DIAGNOSIS_ID treatment=$treatment_code executor=session-manager"
+  TREATMENT_OUT=$(wget -T 90 -qO- "$SESSION_MANAGER_URL?treatment=$treatment_code&diagnosisId=$DIAGNOSIS_ID" 2>>"$BRIDGE_LOG" || true)
+  case "$TREATMENT_OUT" in
+    *'"ok":true'*'"treatmentExecuted":true'*)
+      diagnosis_log "phase=treatment-result diagnosisId=$DIAGNOSIS_ID treatment=$treatment_code result=complete"
+      return 0
+      ;;
+    *)
+      diagnosis_log "phase=treatment-result diagnosisId=$DIAGNOSIS_ID treatment=$treatment_code result=failed"
+      return 1
+      ;;
+  esac
+}
+
+emit_ready() {
+  printf '{"ok":true,"action":"diagnose","status":"ready","diagnosisPhase":"complete","diagnosisId":"none","diagnosisConfirmed":true,"diagnosisState":"NORMAL","faultDomain":"none","recoveryOwner":"none","requiredAction":"none","diagnosisMessage":"정상 상태입니다.","treatmentAllowed":false,"recovered":false,"verified":true,"confidence":"high"}\n'
+}
+
+emit_recovered() {
+  printf '{"ok":true,"action":"diagnose","status":"recovered","diagnosisPhase":"verification","diagnosisId":"%s","diagnosisConfirmed":true,"diagnosisState":"%s","faultDomain":"%s","recoveryOwner":"auto","requiredAction":"none","diagnosisMessage":"복구가 완료되었습니다.","treatmentAllowed":true,"treatmentCode":"%s","recovered":true,"verified":true,"recoveryStage":"%s","confidence":"%s"}\n' "${DIAGNOSIS_ID:-unclassified.unknown}" "${DIAGNOSIS_STATE:-FAULT}" "$1" "${DIAGNOSIS_RESPONSE:-REBUILD_SESSION}" "$2" "${DIAGNOSIS_CONFIDENCE:-high}"
+}
+
+emit_user_action() {
+  printf '{"ok":true,"action":"diagnose","status":"user_action_required","diagnosisPhase":"confirmed","diagnosisId":"%s","diagnosisConfirmed":%s,"diagnosisState":"%s","faultDomain":"%s","recoveryOwner":"user","requiredAction":"%s","diagnosisMessage":"%s","treatmentAllowed":false,"treatmentCode":"USER_NOTIFY","recovered":false,"verified":false,"confidence":"%s"}\n' "${DIAGNOSIS_ID:-unclassified.unknown}" "${DIAGNOSIS_CONFIRMED:-false}" "${DIAGNOSIS_STATE:-UNKNOWN}" "$1" "$2" "${DIAGNOSIS_MESSAGE:-진단 결과를 확인해 주세요.}" "${DIAGNOSIS_CONFIDENCE:-medium}"
+}
+
+emit_limited() {
+  printf '{"ok":true,"action":"diagnose","status":"limited","diagnosisPhase":"confirmed","diagnosisId":"%s","diagnosisConfirmed":true,"diagnosisState":"LIMITED","faultDomain":"%s","recoveryOwner":"user","requiredAction":"%s","diagnosisMessage":"%s","treatmentAllowed":false,"treatmentCode":"USER_NOTIFY","recovered":false,"verified":true,"confidence":"%s"}\n' "${DIAGNOSIS_ID:-POWER.LOW_BATTERY}" "$1" "$2" "${DIAGNOSIS_MESSAGE:-기능이 제한되었습니다.}" "${DIAGNOSIS_CONFIDENCE:-high}"
+}
+
+write_fault() {
+  {
+    printf 'active=true\n'
+    printf 'domain=%s\n' "$1"
+    printf 'stage=%s\n' "$2"
+    printf 'reason=%s\n' "$3"
+    printf 'diagnosisId=%s\n' "${DIAGNOSIS_ID:-unclassified.unknown}"
+    printf 'diagnosisState=%s\n' "${DIAGNOSIS_STATE:-FAULT}"
+    printf 'detectedAtMs=%s\n' "$(now_ms)"
+  } > "$RUNTIME_FAULT_STATE"
+}
+
+emit_diagnosed() {
+  printf '{"ok":true,"action":"diagnose","status":"fault_found","diagnosisPhase":"confirmed","diagnosisId":"%s","diagnosisConfirmed":%s,"diagnosisState":"%s","faultDomain":"%s","faultStage":"%s","faultReason":"%s","recoveryOwner":"%s","requiredAction":"%s","diagnosisMessage":"%s","treatmentAllowed":%s,"treatmentCode":"%s","recovered":false,"verified":true,"confidence":"%s"}\n' "${DIAGNOSIS_ID:-unclassified.unknown}" "${DIAGNOSIS_CONFIRMED:-false}" "${DIAGNOSIS_STATE:-FAULT}" "$1" "$2" "$3" "${DIAGNOSIS_OWNER:-session_manager}" "${DIAGNOSIS_REQUIRED_ACTION:-none}" "${DIAGNOSIS_MESSAGE:-진단 결과를 확인해 주세요.}" "${TREATMENT_ALLOWED:-false}" "${DIAGNOSIS_RESPONSE:-USER_NOTIFY}" "${DIAGNOSIS_CONFIDENCE:-medium}"
+}
+
+classify_fault() {
+  USB_PATH=$(camera_usb_path 2>/dev/null || true)
+  BRIDGE_COUNT=$(count_processes "$BRIDGE_PATTERN")
+  DDSERVER_COUNT=$(count_processes "$DDSERVER_BIN")
+  BEFORE_STATUS=$(current_status)
+
+  if status_limited "$BEFORE_STATUS"; then
+    FAULT_DOMAIN=power; FAULT_STAGE=live_view; FAULT_REASON=low_battery
+  elif [ -z "$USB_PATH" ]; then
+    FAULT_DOMAIN=physical_camera; FAULT_STAGE=camera; FAULT_REASON=camera_usb_not_detected
+  elif [ "${BRIDGE_COUNT:-0}" -gt 1 ] 2>/dev/null; then
+    FAULT_DOMAIN=runtime_process_conflict; FAULT_STAGE=command; FAULT_REASON=duplicate_bridge_process
+  elif [ "${DDSERVER_COUNT:-0}" -eq 0 ] 2>/dev/null; then
+    FAULT_DOMAIN=transport_service; FAULT_STAGE=ptp; FAULT_REASON=ddserver_not_running
+  elif ! bridge_alive; then
+    FAULT_DOMAIN=ptp_session; FAULT_STAGE=command; FAULT_REASON=bridge_unavailable
+  elif ! ws_alive; then
+    FAULT_DOMAIN=frame_delivery; FAULT_STAGE=live_view; FAULT_REASON=websocket_unavailable
+  elif ! battery_worker_alive; then
+    FAULT_DOMAIN=application_runtime; FAULT_STAGE=application; FAULT_REASON=battery_worker_unavailable
+  elif ! session_health_alive; then
+    FAULT_DOMAIN=application_runtime; FAULT_STAGE=application; FAULT_REASON=session_health_unavailable
+  elif ! runtime_guardian_alive; then
+    FAULT_DOMAIN=application_runtime; FAULT_STAGE=application; FAULT_REASON=guardian_unavailable
+  elif status_ready "$BEFORE_STATUS"; then
+    FAULT_DOMAIN=none; FAULT_STAGE=none; FAULT_REASON=ready
+  else
+    case "$BEFORE_STATUS" in
+      *'"hardwareDetected":false'*) FAULT_DOMAIN=camera_usb_transport; FAULT_STAGE=camera; FAULT_REASON=hardware_not_detected ;;
+      *'"transportReady":false'*) FAULT_DOMAIN=ptp_session; FAULT_STAGE=ptp; FAULT_REASON=transport_not_ready ;;
+      *'"commandReady":false'*) FAULT_DOMAIN=command_session; FAULT_STAGE=command; FAULT_REASON=command_not_ready ;;
+      *'"liveViewReady":false'*) FAULT_DOMAIN=frame_delivery; FAULT_STAGE=live_view; FAULT_REASON=live_view_not_ready ;;
+      *) FAULT_DOMAIN=application_readiness; FAULT_STAGE=application; FAULT_REASON=readiness_contract_failed ;;
+    esac
+  fi
+}
+
+confirm_diagnosis() {
+  DIAGNOSIS_ID=unclassified.unknown
+  DIAGNOSIS_STATE=UNKNOWN
+  DIAGNOSIS_CONFIRMED=false
+  DIAGNOSIS_CONFIDENCE=medium
+  DIAGNOSIS_OWNER=USER
+  DIAGNOSIS_REQUIRED_ACTION=notify
+  DIAGNOSIS_RESPONSE=USER_NOTIFY
+  TREATMENT_ALLOWED=false
+
+  case "$FAULT_DOMAIN:$FAULT_REASON" in
+    power:low_battery)
+      DIAGNOSIS_ID=POWER.LOW_BATTERY; DIAGNOSIS_STATE=LIMITED
+      DIAGNOSIS_CONFIRMED=true; DIAGNOSIS_CONFIDENCE=high
+      DIAGNOSIS_REQUIRED_ACTION=replace_battery; DIAGNOSIS_RESPONSE=USER_REPLACE_BATTERY
+      ;;
+    physical_camera:camera_usb_not_detected)
+      DIAGNOSIS_ID=CAMERA.USB_NOT_DETECTED; DIAGNOSIS_STATE=FAULT
+      DIAGNOSIS_CONFIRMED=true; DIAGNOSIS_CONFIDENCE=high
+      DIAGNOSIS_REQUIRED_ACTION=check_power_usb; DIAGNOSIS_RESPONSE=USER_CHECK_POWER_USB
+      ;;
+    runtime_process_conflict:duplicate_bridge_process)
+      DIAGNOSIS_ID=RUNTIME.DUPLICATE_OWNER; DIAGNOSIS_STATE=FAULT
+      DIAGNOSIS_CONFIRMED=true; DIAGNOSIS_CONFIDENCE=high
+      DIAGNOSIS_OWNER=AUTO; DIAGNOSIS_REQUIRED_ACTION=none
+      DIAGNOSIS_RESPONSE=RESTART_COMPONENT; TREATMENT_ALLOWED=true
+      ;;
+    transport_service:ddserver_not_running)
+      DIAGNOSIS_ID=RUNTIME.DDSERVER_STOPPED; DIAGNOSIS_STATE=FAULT
+      DIAGNOSIS_CONFIRMED=true; DIAGNOSIS_CONFIDENCE=high
+      DIAGNOSIS_OWNER=AUTO; DIAGNOSIS_REQUIRED_ACTION=none
+      DIAGNOSIS_RESPONSE=RESTART_COMPONENT; TREATMENT_ALLOWED=true
+      ;;
+    ptp_session:bridge_unavailable)
+      DIAGNOSIS_ID=RUNTIME.BRIDGE_STOPPED; DIAGNOSIS_STATE=FAULT
+      DIAGNOSIS_CONFIRMED=true; DIAGNOSIS_CONFIDENCE=high
+      DIAGNOSIS_OWNER=AUTO; DIAGNOSIS_REQUIRED_ACTION=none
+      DIAGNOSIS_RESPONSE=RESTART_BRIDGE; TREATMENT_ALLOWED=true
+      ;;
+    camera_usb_transport:hardware_not_detected)
+      DIAGNOSIS_ID=CAMERA.HARDWARE_NOT_RECOGNIZED; DIAGNOSIS_STATE=FAULT
+      DIAGNOSIS_CONFIRMED=true; DIAGNOSIS_CONFIDENCE=high
+      DIAGNOSIS_REQUIRED_ACTION=check_power_usb; DIAGNOSIS_RESPONSE=USER_CHECK_POWER_USB
+      ;;
+    ptp_session:transport_not_ready)
+      DIAGNOSIS_ID=PTP.SESSION_UNAVAILABLE; DIAGNOSIS_STATE=FAULT
+      DIAGNOSIS_CONFIRMED=true; DIAGNOSIS_CONFIDENCE=high
+      DIAGNOSIS_OWNER=AUTO; DIAGNOSIS_REQUIRED_ACTION=none
+      DIAGNOSIS_RESPONSE=REOPEN_PTP; TREATMENT_ALLOWED=true
+      ;;
+    command_session:command_not_ready)
+      DIAGNOSIS_ID=COMMAND.ROUTE_NOT_READY; DIAGNOSIS_STATE=FAULT
+      DIAGNOSIS_CONFIRMED=true; DIAGNOSIS_CONFIDENCE=high
+      DIAGNOSIS_OWNER=AUTO; DIAGNOSIS_REQUIRED_ACTION=none
+      DIAGNOSIS_RESPONSE=REOPEN_PTP; TREATMENT_ALLOWED=true
+      ;;
+    frame_delivery:live_view_not_ready)
+      DIAGNOSIS_ID=DELIVERY.FRAME_NOT_PUBLISHED; DIAGNOSIS_STATE=FAULT
+      DIAGNOSIS_CONFIRMED=true; DIAGNOSIS_CONFIDENCE=medium
+      DIAGNOSIS_OWNER=AUTO; DIAGNOSIS_REQUIRED_ACTION=none
+      DIAGNOSIS_RESPONSE=RESTART_COMPONENT; TREATMENT_ALLOWED=true
+      ;;
+    frame_delivery:websocket_unavailable)
+      DIAGNOSIS_ID=RUNTIME.WEBSOCKET_STOPPED; DIAGNOSIS_STATE=FAULT
+      DIAGNOSIS_CONFIRMED=true; DIAGNOSIS_CONFIDENCE=high
+      DIAGNOSIS_OWNER=AUTO; DIAGNOSIS_REQUIRED_ACTION=none
+      DIAGNOSIS_RESPONSE=RESTART_COMPONENT; TREATMENT_ALLOWED=true
+      ;;
+    application_readiness:readiness_contract_failed)
+      DIAGNOSIS_ID=SESSION.READINESS_CONTRACT_FAILED; DIAGNOSIS_STATE=FAULT
+      DIAGNOSIS_CONFIRMED=true; DIAGNOSIS_CONFIDENCE=medium
+      DIAGNOSIS_OWNER=AUTO; DIAGNOSIS_REQUIRED_ACTION=none
+      DIAGNOSIS_RESPONSE=REBUILD_SESSION; TREATMENT_ALLOWED=true
+      ;;
+    application_runtime:battery_worker_unavailable)
+      DIAGNOSIS_ID=RUNTIME.BATTERY_WORKER_STOPPED; DIAGNOSIS_STATE=FAULT
+      DIAGNOSIS_CONFIRMED=true; DIAGNOSIS_CONFIDENCE=high
+      DIAGNOSIS_OWNER=AUTO; DIAGNOSIS_RESPONSE=RESTART_COMPONENT; TREATMENT_ALLOWED=true
+      ;;
+    application_runtime:session_health_unavailable)
+      DIAGNOSIS_ID=RUNTIME.SESSION_HEALTH_STOPPED; DIAGNOSIS_STATE=FAULT
+      DIAGNOSIS_CONFIRMED=true; DIAGNOSIS_CONFIDENCE=high
+      DIAGNOSIS_OWNER=AUTO; DIAGNOSIS_RESPONSE=RESTART_COMPONENT; TREATMENT_ALLOWED=true
+      ;;
+    application_runtime:guardian_unavailable)
+      DIAGNOSIS_ID=RUNTIME.GUARDIAN_STOPPED; DIAGNOSIS_STATE=FAULT
+      DIAGNOSIS_CONFIRMED=true; DIAGNOSIS_CONFIDENCE=high
+      DIAGNOSIS_OWNER=AUTO; DIAGNOSIS_RESPONSE=RESTART_COMPONENT; TREATMENT_ALLOWED=true
+      ;;
+  esac
+  [ "$DIAGNOSIS_CONFIRMED" = true ]
+}
+
+verify_and_emit() {
+  treatment_code=$1
+  verify_out=$(current_status)
+  if status_ready "$verify_out"; then
+    rm -f "$RUNTIME_FAULT_STATE"
+    diagnosis_log "phase=verification diagnosisId=$DIAGNOSIS_ID treatment=$treatment_code result=recovered"
+    emit_recovered "$FAULT_DOMAIN" "$treatment_code"
+    return 0
+  fi
+  classify_fault
+  confirm_diagnosis >/dev/null 2>&1 || true
+  DIAGNOSIS_MESSAGE=$(diagnosis_message "$DIAGNOSIS_ID")
+  write_fault "$FAULT_DOMAIN" "$FAULT_STAGE" "$FAULT_REASON"
+  emit_diagnosed "$FAULT_DOMAIN" "$FAULT_STAGE" "$FAULT_REASON"
+  return 1
+}
+
+classify_fault
+if [ "$FAULT_DOMAIN" = none ]; then
+  rm -f "$RUNTIME_FAULT_STATE"
+  diagnosis_log "phase=complete diagnosisId=none state=NORMAL result=ready"
+  emit_ready
+  exit 0
+fi
+diagnosis_log "phase=diagnosis classified domain=$FAULT_DOMAIN stage=$FAULT_STAGE reason=$FAULT_REASON"
+if ! confirm_diagnosis; then
+  diagnosis_log "phase=confirmation result=unclassified domain=$FAULT_DOMAIN stage=$FAULT_STAGE reason=$FAULT_REASON"
+  # UNKNOWN is a diagnostic result, not a confirmed system fault. Do not
+  # promote it into the red fault state consumed by status-v21.
+  rm -f "$RUNTIME_FAULT_STATE"
+  DIAGNOSIS_MESSAGE=$(diagnosis_message "$DIAGNOSIS_ID")
+  emit_diagnosed "$FAULT_DOMAIN" "$FAULT_STAGE" "$FAULT_REASON"
+  exit 0
+fi
+DIAGNOSIS_MESSAGE=$(diagnosis_message "$DIAGNOSIS_ID")
+diagnosis_log "phase=confirmation diagnosisId=$DIAGNOSIS_ID state=$DIAGNOSIS_STATE owner=$DIAGNOSIS_OWNER response=$DIAGNOSIS_RESPONSE"
+if [ "$DIAGNOSIS_STATE" = LIMITED ]; then
+  emit_limited "$FAULT_DOMAIN" "$DIAGNOSIS_REQUIRED_ACTION"
+  exit 0
+fi
+write_fault "$FAULT_DOMAIN" "$FAULT_STAGE" "$FAULT_REASON"
+
+if [ "$MODE" = inspect ]; then
+  if [ "$TREATMENT_ALLOWED" != true ]; then
+    emit_user_action "$FAULT_DOMAIN" "$DIAGNOSIS_REQUIRED_ACTION"
+  else
+    emit_diagnosed "$FAULT_DOMAIN" "$FAULT_STAGE" "$FAULT_REASON"
+  fi
+  exit 0
+fi
+
+if [ "$TREATMENT_ALLOWED" != true ]; then
+  emit_user_action "$FAULT_DOMAIN" "$DIAGNOSIS_REQUIRED_ACTION"
+  exit 0
+fi
+
+case "$MODE" in
+  clean) SELECTED_TREATMENT=RESTART_COMPONENT ;;
+  session-reset) SELECTED_TREATMENT=REOPEN_PTP ;;
+  session-switch) SELECTED_TREATMENT=REBUILD_SESSION ;;
+  auto) SELECTED_TREATMENT=$DIAGNOSIS_RESPONSE ;;
+  *) emit_diagnosed "$FAULT_DOMAIN" "$FAULT_STAGE" "$FAULT_REASON"; exit 0 ;;
+esac
+
+if request_treatment "$SELECTED_TREATMENT"; then
+  verify_and_emit "$SELECTED_TREATMENT"
+  exit 0
+fi
+
+diagnosis_log "phase=verification diagnosisId=$DIAGNOSIS_ID result=treatment_failed"
+emit_diagnosed "$FAULT_DOMAIN" "$FAULT_STAGE" "$FAULT_REASON"

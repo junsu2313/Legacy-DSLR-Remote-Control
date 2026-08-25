@@ -1,0 +1,90 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+BRIDGE_HOST=${BRIDGE_HOST:-127.0.0.1}
+BRIDGE_PORT=${BRIDGE_PORT:-8189}
+BRIDGE_LOG=${BRIDGE_LOG:-/tmp/d810-bridge-v21.log}
+NC_BIN=${NC_BIN:-/usr/bin/nc}
+WS_PIDFILE=${WS_PIDFILE:-/tmp/d810-ws-v21.pid}
+WS_HEALTH_PATH=${D810D_WS_HEALTH_PATH:-/tmp/d810-ws-v21.health}
+RUNTIME_FAULT_STATE=${D810D_RUNTIME_FAULT_STATE:-/tmp/d810-runtime-fault.state}
+
+status_trace_log() {
+  [ "${D810D_TRACE_STATUS:-0}" = "1" ] || return 0
+  printf '[status-v21][%s] %s\n' "$(date +%s)" "$1" >> "$BRIDGE_LOG"
+}
+
+status_trace_log "received query=${QUERY_STRING:-}"
+status_trace_log "headers trace=${HTTP_X_D810_TRACE:-} event=${HTTP_X_D810_EVENT:-} client=${HTTP_X_D810_CLIENT:-} ui_at=${HTTP_X_D810_UI_AT:-} ui_stage=${HTTP_X_D810_UI_STAGE:-} ui_action=${HTTP_X_D810_UI_ACTION:-}"
+
+OUT=$(printf '%s\n' STATUS | "$NC_BIN" "$BRIDGE_HOST" "$BRIDGE_PORT" 2>>"$BRIDGE_LOG")
+status_trace_log "bridge response ${OUT%%$'\n'*}"
+if [ -z "$OUT" ]; then
+  OUT='{"ok":false,"status":"bridge_unavailable","cameraDetected":false,"liveView":false}'
+fi
+
+DELIVERY_READY=0
+WS_RUNTIME=unknown
+WS_PID=$(cat "$WS_PIDFILE" 2>/dev/null || true)
+case "$WS_PID" in
+  ''|*[!0-9]*) ;;
+  *)
+    if [ -d "/proc/$WS_PID" ] && [ -r "$WS_HEALTH_PATH" ]; then
+      WS_CMD=$(tr '\000' ' ' < "/proc/$WS_PID/cmdline" 2>/dev/null || true)
+      WS_STATE=$(sed -n 's/^state=//p' "$WS_HEALTH_PATH" | sed -n '1p')
+      WS_RUNTIME_VALUE=$(sed -n 's/^runtime=//p' "$WS_HEALTH_PATH" | sed -n '1p')
+      case "$WS_RUNTIME_VALUE" in
+        nixio|eco) WS_RUNTIME=$WS_RUNTIME_VALUE ;;
+      esac
+      WS_FRAME_AT=$(sed -n 's/^lastFrameAtSec=//p' "$WS_HEALTH_PATH" | sed -n '1p')
+      case "$WS_CMD" in
+        *d810ws.lua*) [ "$WS_STATE" = "ready" ] && DELIVERY_READY=1 ;;
+      esac
+      case "$OUT" in
+        *'"liveView":true'*)
+          NOW_SEC=$(date +%s)
+          case "$WS_FRAME_AT" in
+            ''|*[!0-9]*) DELIVERY_READY=0 ;;
+            *) [ $((NOW_SEC - WS_FRAME_AT)) -le 3 ] 2>/dev/null || DELIVERY_READY=0 ;;
+          esac
+          ;;
+      esac
+    fi
+    ;;
+esac
+
+if [ "$DELIVERY_READY" -eq 1 ]; then
+  OUT="${OUT%?},\"deliveryReady\":true,\"deliveryRuntime\":\"$WS_RUNTIME\"}"
+else
+  OUT=$(printf '%s' "$OUT" | sed \
+    -e 's/"appReady":true/"appReady":false/' \
+    -e 's/"readinessState":"ready"/"readinessState":"degraded"/' \
+    -e 's/"readinessReason":"ready"/"readinessReason":"frame_delivery_not_ready"/' \
+    -e 's/"uiPhase":"Ready"/"uiPhase":"Preparing"/')
+  OUT="${OUT%?},\"deliveryReady\":false,\"deliveryRuntime\":\"$WS_RUNTIME\"}"
+fi
+
+FAULT_ACTIVE=false
+FAULT_DOMAIN=none
+FAULT_STAGE=none
+FAULT_REASON=none
+FAULT_DETECTED_AT_MS=0
+if [ -r "$RUNTIME_FAULT_STATE" ]; then
+  while IFS='=' read -r fault_key fault_value; do
+    case "$fault_key" in
+      active) FAULT_ACTIVE=$fault_value ;;
+      domain) FAULT_DOMAIN=$fault_value ;;
+      stage) FAULT_STAGE=$fault_value ;;
+      reason) FAULT_REASON=$fault_value ;;
+      detectedAtMs) FAULT_DETECTED_AT_MS=$fault_value ;;
+    esac
+  done < "$RUNTIME_FAULT_STATE"
+fi
+case "$FAULT_ACTIVE" in true|false) ;; *) FAULT_ACTIVE=false ;; esac
+case "$FAULT_DETECTED_AT_MS" in ''|*[!0-9]*) FAULT_DETECTED_AT_MS=0 ;; esac
+FAULT_DOMAIN=$(printf '%s' "$FAULT_DOMAIN" | tr -cd 'A-Za-z0-9_:-')
+FAULT_STAGE=$(printf '%s' "$FAULT_STAGE" | tr -cd 'A-Za-z0-9_:-')
+FAULT_REASON=$(printf '%s' "$FAULT_REASON" | tr -cd 'A-Za-z0-9_:-')
+OUT="${OUT%?},\"faultActive\":$FAULT_ACTIVE,\"faultDomain\":\"$FAULT_DOMAIN\",\"faultStage\":\"$FAULT_STAGE\",\"faultReason\":\"$FAULT_REASON\",\"faultDetectedAtMs\":$FAULT_DETECTED_AT_MS}"
+
+printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+printf '%s\n' "$OUT"

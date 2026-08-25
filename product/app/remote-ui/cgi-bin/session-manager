@@ -1,0 +1,530 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+SCRIPT_DIR=$(dirname "$0")
+case "$SCRIPT_DIR" in
+  /*) ;;
+  *) SCRIPT_DIR=/www/cgi-bin ;;
+esac
+. "$SCRIPT_DIR/variant-v21-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+
+printf 'Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+
+SESSION_LOG_ROOT=${SESSION_LOG_ROOT:-/root/d810-sessions}
+SESSION_SEQ_FILE=${SESSION_SEQ_FILE:-"$SESSION_LOG_ROOT/session.seq"}
+SESSION_SEQ_LOCK=${SESSION_SEQ_LOCK:-"$SESSION_LOG_ROOT/session.seq.lock"}
+SESSION_LOG_MAX_KIB=${D810D_SESSION_LOG_MAX_KIB:-10240}
+GLOBAL_CAMERA_LOG=${D810D_GLOBAL_LOG:-/root/d810-camera-events.log}
+DIAGNOSTIC_LOG=${D810D_DIAGNOSTIC_LOG:-/root/d810-diagnostics.log}
+DIAGNOSTIC_LOG_MAX_BYTES=${D810D_DIAGNOSTIC_LOG_MAX_BYTES:-1048576}
+SESSION_REPAIR_REQUEST=${SESSION_REPAIR_REQUEST:-/tmp/d810-session.repair}
+SESSION_REPAIR_PIDFILE=${SESSION_REPAIR_PIDFILE:-/tmp/d810-session-repair.pid}
+SESSION_LIVE_REQUEST=${SESSION_LIVE_REQUEST:-/tmp/d810-session.live}
+LIVE_SESSION_STATE=${D810D_LIVE_SESSION_PATH:-/tmp/d810-live-v21.session}
+SESSION_BOOT_LOCK=${D810D_SESSION_BOOT_LOCK:-/tmp/d810-session-manager.boot.lock}
+SESSION_BOOT_LOCK_TIMEOUT=${D810D_SESSION_BOOT_LOCK_TIMEOUT:-30}
+SESSION_BOOT_LOCK_STALE_MS=${D810D_SESSION_BOOT_LOCK_STALE_MS:-60000}
+# Startup has no short wall-clock deadline.  Each stage gets a generous
+# per-attempt watchdog and can retry independently without rewinding earlier
+# successful stages.
+SESSION_STAGE_MAX_ATTEMPTS=${D810D_SESSION_STAGE_MAX_ATTEMPTS:-40}
+SESSION_STAGE_ATTEMPT_TIMEOUT=${D810D_SESSION_STAGE_ATTEMPT_TIMEOUT:-30}
+TRANSPORT_STAGE_MAX_ATTEMPTS=${D810D_TRANSPORT_STAGE_MAX_ATTEMPTS:-3}
+HARD_RESET_REQUEST=0
+case "${QUERY_STRING:-}" in
+  *reset=1*) HARD_RESET_REQUEST=1 ;;
+esac
+PRESERVE_LIVE=0
+
+release_boot_lock() {
+  rm -f "$SESSION_BOOT_LOCK/pid" 2>/dev/null || true
+  rm -f "$SESSION_BOOT_LOCK/started" 2>/dev/null || true
+  rmdir "$SESSION_BOOT_LOCK" 2>/dev/null || true
+}
+
+acquire_boot_lock() {
+  attempts=0
+  while [ "$attempts" -lt "$SESSION_BOOT_LOCK_TIMEOUT" ]; do
+    if mkdir "$SESSION_BOOT_LOCK" 2>/dev/null; then
+      printf '%s\n' "$$" > "$SESSION_BOOT_LOCK/pid"
+      printf '%s\n' "$(now_ms)" > "$SESSION_BOOT_LOCK/started"
+      trap 'release_boot_lock' EXIT INT TERM
+      return 0
+    fi
+    owner=$(cat "$SESSION_BOOT_LOCK/pid" 2>/dev/null || true)
+    started=$(cat "$SESSION_BOOT_LOCK/started" 2>/dev/null || true)
+    if [ -z "$started" ] || [ $(( $(now_ms) - ${started:-0} )) -gt "$SESSION_BOOT_LOCK_STALE_MS" ]; then
+      release_boot_lock
+      continue
+    fi
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+      release_boot_lock
+      continue
+    fi
+    sleep 1
+    attempts=$((attempts + 1))
+  done
+  return 1
+}
+
+session_label_from_number() {
+  number=$1
+  printf '%03d_session' "${number:-0}"
+}
+
+session_dir_from_number() {
+  number=$1
+  printf '%s/%s' "$SESSION_LOG_ROOT" "$(session_label_from_number "$number")"
+}
+
+allocate_session_id() {
+  seq_file=$1
+  lock_dir=$2
+  next_id=1
+  if mkdir "$lock_dir" 2>/dev/null; then
+    trap 'rmdir "$lock_dir" 2>/dev/null || true' EXIT INT TERM
+    if [ -r "$seq_file" ]; then
+      last_id=$(cat "$seq_file" 2>/dev/null)
+      case $last_id in
+        ''|*[!0-9]*) last_id=0 ;;
+      esac
+      next_id=$((last_id + 1))
+    fi
+    printf '%s\n' "$next_id" > "$seq_file"
+    trap - EXIT INT TERM
+    rmdir "$lock_dir" 2>/dev/null || true
+    printf '%s\n' "$next_id"
+    return 0
+  fi
+  return 1
+}
+
+session_log() {
+  message=$1
+  line="[session-manager][${SESSION_LABEL:-unknown}][$(now_ms)] $message"
+  if [ -n "$SESSION_LOG_FILE" ]; then
+    printf '%s\n' "$line" >> "$SESSION_LOG_FILE"
+  fi
+  if [ -n "$GLOBAL_CAMERA_LOG" ]; then
+    mkdir -p "$(dirname "$GLOBAL_CAMERA_LOG")" 2>/dev/null || true
+    printf '%s\n' "$line" >> "$GLOBAL_CAMERA_LOG"
+  fi
+}
+
+treatment_log() {
+  treatment_line="[session-manager][$(now_ms)] $1"
+  if [ -r "$DIAGNOSTIC_LOG" ]; then
+    diagnostic_size=$(wc -c < "$DIAGNOSTIC_LOG" 2>/dev/null || printf 0)
+  else
+    diagnostic_size=0
+  fi
+  [ "${diagnostic_size:-0}" -le "$DIAGNOSTIC_LOG_MAX_BYTES" ] || mv -f "$DIAGNOSTIC_LOG" "$DIAGNOSTIC_LOG.1" 2>/dev/null || true
+  printf '%s\n' "$treatment_line" >> "$DIAGNOSTIC_LOG"
+  session_log "$1"
+}
+
+boot_transport_stage() {
+  attempt=1
+  while [ "$attempt" -le "$TRANSPORT_STAGE_MAX_ATTEMPTS" ]; do
+    session_log "stage=project_transport attempt=$attempt/$TRANSPORT_STAGE_MAX_ATTEMPTS"
+    if project_ddserver_start; then
+      session_log "stage=project_transport ready attempt=$attempt"
+      return 0
+    fi
+    session_log "stage=project_transport failed attempt=$attempt; retrying project-owned transport only"
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+  return 1
+}
+
+boot_runtime_dependency_stage() {
+  session_log "stage=runtime_dependencies dependency=nixio"
+  if command -v project_nixio_prepare >/dev/null 2>&1 && project_nixio_prepare; then
+    session_log "stage=runtime_dependencies ready dependency=nixio source=project"
+    return 0
+  fi
+  # Stock eco remains a certified fallback, so an optional module can never
+  # turn a usable factory image into a boot failure.
+  session_log "stage=runtime_dependencies fallback dependency=nixio runtime=eco"
+  return 0
+}
+
+status_contract_ready() {
+  payload=$1
+  case "$payload" in *'"ok":true'*) ;; *) return 1 ;; esac
+  case "$payload" in *'"appReady":true'*) ;; *) return 1 ;; esac
+  case "$payload" in *'"transportReady":true'*) ;; *) return 1 ;; esac
+  case "$payload" in *'"capabilityCertified":true'*) ;; *) return 1 ;; esac
+  case "$payload" in *'"commandReady":true'*) ;; *) return 1 ;; esac
+  case "$payload" in
+    *'"liveViewReady":true'*|*'"liveViewLimited":true'*) ;;
+    *) return 1 ;;
+  esac
+  case "$payload" in *'"captureReady":true'*) ;; *) return 1 ;; esac
+  case "$payload" in *'"storageReady":true'*) ;; *) return 1 ;; esac
+  case "$payload" in *'"fileRouteReady":true'*) ;; *) return 1 ;; esac
+  return 0
+}
+
+camera_contract_ready() {
+  payload=$1
+  case "$payload" in *'"ok":true'*) ;; *) return 1 ;; esac
+  case "$payload" in *'"transportReady":true'*) ;; *) return 1 ;; esac
+  case "$payload" in *'"capabilityCertified":true'*) ;; *) return 1 ;; esac
+  case "$payload" in *'"commandReady":true'*) ;; *) return 1 ;; esac
+  case "$payload" in
+    *'"liveViewReady":true'*|*'"liveViewLimited":true'*) ;;
+    *) return 1 ;;
+  esac
+  case "$payload" in *'"captureReady":true'*) ;; *) return 1 ;; esac
+  case "$payload" in *'"storageReady":true'*) ;; *) return 1 ;; esac
+  case "$payload" in *'"fileRouteReady":true'*) ;; *) return 1 ;; esac
+  return 0
+}
+
+final_delivery_stage() {
+  attempt=1
+  while [ "$attempt" -le 5 ]; do
+    final_status_out=$(QUERY_STRING= /bin/sh "$SCRIPT_DIR/status-v21" 2>/dev/null | sed -n '/^{/p' | sed -n '1p')
+    if status_contract_ready "$final_status_out"; then
+      case "$final_status_out" in
+        *'"deliveryReady":true'*) status_out=$final_status_out; return 0 ;;
+      esac
+    fi
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+  return 1
+}
+
+boot_camera_stage() {
+  # App launch owns exactly one BOOT transaction. A failed certification is
+  # reported as-is; runtime recovery belongs to the session guardian and must
+  # never rewind the visible startup sequence.
+  session_log "stage=ptp_boot attempt=1/1"
+  status_out=$(bridge_request_timed BOOT "$SESSION_STAGE_ATTEMPT_TIMEOUT")
+  if camera_contract_ready "$status_out"; then
+    session_log "stage=ptp_boot ready attempt=1"
+    return 0
+  fi
+  session_log "stage=ptp_boot failed attempt=1; handing fault to session recovery"
+  return 1
+}
+
+start_worker_stage() {
+  stage=$1
+  attempt=1
+  while [ "$attempt" -le "$SESSION_STAGE_MAX_ATTEMPTS" ]; do
+    session_log "stage=$stage attempt=$attempt/$SESSION_STAGE_MAX_ATTEMPTS"
+    case "$stage" in
+      websocket) ws_start >/dev/null 2>&1 || true; ws_alive && return 0 ;;
+      battery) battery_worker_start >/dev/null 2>&1 || true; battery_worker_alive && return 0 ;;
+      session_health) session_health_start >/dev/null 2>&1 || true; session_health_alive && return 0 ;;
+      runtime_guardian) runtime_guardian_start >/dev/null 2>&1 || true; runtime_guardian_alive && return 0 ;;
+      *) return 1 ;;
+    esac
+    session_log "stage=$stage failed attempt=$attempt; retrying this stage only"
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+  return 1
+}
+
+start_workers_serial() {
+  start_worker_stage websocket || return 1
+  start_worker_stage battery || return 1
+  start_worker_stage session_health || return 1
+  start_worker_stage runtime_guardian || return 1
+  return 0
+}
+
+prune_session_logs() {
+  max_kib=$1
+  case "$max_kib" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+  [ "$max_kib" -gt 0 ] || return 0
+  while :; do
+    usage_kib=$(du -sk "$SESSION_LOG_ROOT"/*_session 2>/dev/null | awk '{ total += $1 } END { print total + 0 }')
+    [ "${usage_kib:-0}" -le "$max_kib" ] && break
+    oldest_dir=$(ls -d "$SESSION_LOG_ROOT"/[0-9][0-9][0-9]_session 2>/dev/null | sort | head -n 1)
+    [ -n "$oldest_dir" ] || break
+    case "$oldest_dir" in
+      "$SESSION_LOG_ROOT"/[0-9][0-9][0-9]_session)
+        rm -rf "$oldest_dir"
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+}
+
+query_param() {
+  key=$1
+  printf '%s' "${QUERY_STRING:-}" | tr '&' '\n' | sed -n "s/^${key}=//p" | sed -n '1p'
+}
+
+treatment_token() {
+  printf '%s' "$1" | tr -cd 'A-Za-z0-9._-'
+}
+
+restore_live_intent() {
+  [ -f "$SESSION_LIVE_REQUEST" ] || return 0
+  bridge_request LIVE_START >/dev/null 2>&1
+}
+
+execute_component_treatment() {
+  diagnosis_id=$1
+  case "$diagnosis_id" in
+    RUNTIME.DDSERVER_STOPPED)
+      project_ddserver_start
+      ;;
+    RUNTIME.WEBSOCKET_STOPPED|DELIVERY.WS_UNAVAILABLE|DELIVERY.FRAME_NOT_PUBLISHED|DELIVERY.DIRECT_STREAM_FAILED)
+      ws_stop >/dev/null 2>&1 || true
+      ws_start >/dev/null 2>&1
+      ;;
+    RUNTIME.BATTERY_WORKER_STOPPED)
+      battery_worker_stop >/dev/null 2>&1 || true
+      battery_worker_start >/dev/null 2>&1
+      ;;
+    RUNTIME.SESSION_HEALTH_STOPPED)
+      session_health_stop >/dev/null 2>&1 || true
+      session_health_start >/dev/null 2>&1
+      ;;
+    RUNTIME.GUARDIAN_STOPPED)
+      runtime_guardian_stop >/dev/null 2>&1 || true
+      runtime_guardian_start >/dev/null 2>&1
+      ;;
+    RUNTIME.DUPLICATE_OWNER|RUNTIME.STALE_LOCK)
+      bridge_stop >/dev/null 2>&1 || true
+      bridge_only_start && bridge_request BOOT >/dev/null 2>&1
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+execute_session_rebuild() {
+  /bin/sh "$SCRIPT_DIR/frame-refresh-v21" stop >/dev/null 2>&1 || true
+  ws_stop >/dev/null 2>&1 || true
+  battery_worker_stop >/dev/null 2>&1 || true
+  session_health_stop >/dev/null 2>&1 || true
+  stack_guardian_stop >/dev/null 2>&1 || true
+  runtime_guardian_stop >/dev/null 2>&1 || true
+  bridge_stop >/dev/null 2>&1 || true
+  project_ddserver_start || return 1
+  bridge_only_start || return 1
+  bridge_request BOOT >/dev/null 2>&1 || return 1
+  restore_live_intent >/dev/null 2>&1 || true
+  ws_start >/dev/null 2>&1 || return 1
+  battery_worker_start >/dev/null 2>&1 || return 1
+  session_health_start >/dev/null 2>&1 || return 1
+  runtime_guardian_start >/dev/null 2>&1 || return 1
+}
+
+execute_treatment() {
+  treatment_code=$1
+  diagnosis_id=$2
+  case "$treatment_code" in
+    WAIT_AND_RETRY|REFRESH_STATUS|FALLBACK_DEGRADED)
+      return 0
+      ;;
+    REOPEN_PTP)
+      bridge_request RECOVER >/dev/null 2>&1 || return 1
+      restore_live_intent >/dev/null 2>&1 || true
+      ;;
+    RESTART_COMPONENT)
+      execute_component_treatment "$diagnosis_id"
+      ;;
+    RESTART_BRIDGE)
+      bridge_stop >/dev/null 2>&1 || true
+      bridge_only_start || return 1
+      bridge_request BOOT >/dev/null 2>&1 || return 1
+      restore_live_intent >/dev/null 2>&1 || true
+      ;;
+    REBUILD_SESSION)
+      execute_session_rebuild
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+TREATMENT_CODE=$(treatment_token "$(query_param treatment)")
+TREATMENT_DIAGNOSIS_ID=$(treatment_token "$(query_param diagnosisId)")
+if [ -n "$TREATMENT_CODE" ]; then
+  if ! acquire_boot_lock; then
+    printf '{"ok":false,"status":"treatment_busy","treatmentCode":"%s","diagnosisId":"%s","treatmentExecuted":false}\n' "$TREATMENT_CODE" "$TREATMENT_DIAGNOSIS_ID"
+    exit 0
+  fi
+  treatment_log "role=executor treatment=$TREATMENT_CODE diagnosisId=$TREATMENT_DIAGNOSIS_ID phase=start"
+  if execute_treatment "$TREATMENT_CODE" "$TREATMENT_DIAGNOSIS_ID"; then
+    treatment_log "role=executor treatment=$TREATMENT_CODE diagnosisId=$TREATMENT_DIAGNOSIS_ID phase=complete"
+    printf '{"ok":true,"status":"treatment_complete","treatmentCode":"%s","diagnosisId":"%s","treatmentExecuted":true}\n' "$TREATMENT_CODE" "$TREATMENT_DIAGNOSIS_ID"
+  else
+    treatment_log "role=executor treatment=$TREATMENT_CODE diagnosisId=$TREATMENT_DIAGNOSIS_ID phase=failed"
+    printf '{"ok":false,"status":"treatment_failed","treatmentCode":"%s","diagnosisId":"%s","treatmentExecuted":false}\n' "$TREATMENT_CODE" "$TREATMENT_DIAGNOSIS_ID"
+  fi
+  exit 0
+fi
+
+if ! acquire_boot_lock; then
+  printf '{"ok":false,"status":"boot_busy","cameraDetected":false,"bridgeStarted":false,"workersStarted":false}\n'
+  exit 0
+fi
+
+if [ "$HARD_RESET_REQUEST" -eq 0 ] && [ -f "$SESSION_LIVE_REQUEST" ]; then
+  PRESERVE_LIVE=1
+fi
+
+SESSION_NUMBER=""
+if [ "$HARD_RESET_REQUEST" -eq 0 ] && [ -r /tmp/d810-session-v21.state ]; then
+  SESSION_NUMBER=$(sed -n 's/^sessionId=//p' /tmp/d810-session-v21.state | sed -n '1p')
+  case "$SESSION_NUMBER" in
+    ''|*[!0-9]*) SESSION_NUMBER="" ;;
+  esac
+fi
+NEW_SESSION=0
+if [ -z "$SESSION_NUMBER" ]; then
+  SESSION_NUMBER=$(allocate_session_id "$SESSION_SEQ_FILE" "$SESSION_SEQ_LOCK")
+  NEW_SESSION=1
+fi
+trap 'release_boot_lock' EXIT INT TERM
+if [ -z "$SESSION_NUMBER" ]; then
+  SESSION_NUMBER=1
+fi
+SESSION_LABEL=$(session_label_from_number "$SESSION_NUMBER")
+SESSION_DIR=$(session_dir_from_number "$SESSION_NUMBER")
+if [ ! -d "$SESSION_DIR" ]; then
+  NEW_SESSION=1
+fi
+if [ "$NEW_SESSION" -eq 1 ]; then
+  prune_session_logs "$SESSION_LOG_MAX_KIB"
+fi
+SESSION_LOG_FILE="$SESSION_DIR/bridge.log"
+mkdir -p "$SESSION_LOG_ROOT" "$SESSION_DIR"
+mkdir -p "$(dirname "$GLOBAL_CAMERA_LOG")" 2>/dev/null || true
+touch "$SESSION_LOG_FILE"
+export D810D_SESSION_ID="$SESSION_NUMBER"
+export D810D_SESSION_LABEL="$SESSION_LABEL"
+export D810D_SESSION_DIR="$SESSION_DIR"
+export D810D_DEBUG_LOG="$SESSION_LOG_FILE"
+export BRIDGE_LOG="$SESSION_LOG_FILE"
+export WS_LOG="$SESSION_DIR/ws.log"
+
+if [ "$NEW_SESSION" -eq 1 ]; then
+  session_log "allocated session directory"
+else
+  session_log "reusing existing session directory"
+fi
+
+if [ "$HARD_RESET_REQUEST" -eq 1 ]; then
+  session_log "new browser session requested; clearing prior live session"
+  PRESERVE_LIVE=0
+  rm -f "$SESSION_LIVE_REQUEST" "$SESSION_REPAIR_REQUEST"
+  /bin/sh "$SCRIPT_DIR/frame-refresh-v21" stop >/dev/null 2>&1 || true
+  ws_stop >/dev/null 2>&1 || true
+  battery_worker_stop >/dev/null 2>&1 || true
+  session_health_stop >/dev/null 2>&1 || true
+  stack_guardian_stop >/dev/null 2>&1 || true
+  runtime_guardian_stop >/dev/null 2>&1 || true
+  bridge_stop >/dev/null 2>&1 || true
+  purge_runtime_tmp
+fi
+
+boot_runtime_dependency_stage
+
+if ! boot_transport_stage; then
+  session_log "stage=project_transport exhausted attempts"
+  printf '{"ok":false,"status":"boot_failed","cameraDetected":false,"bridgeStarted":false,"workersStarted":false,"stage":"project_transport","attempts":%s}\n' "$TRANSPORT_STAGE_MAX_ATTEMPTS"
+  exit 0
+fi
+
+if bridge_alive; then
+  session_log "healthy bridge already running; reusing runtime"
+  if [ "$PRESERVE_LIVE" -eq 1 ]; then
+    bridge_request "RELOAD_SESSION $SESSION_NUMBER" >/dev/null 2>&1 || true
+  fi
+  if ! boot_camera_stage; then
+    session_log "existing bridge failed camera readiness"
+    start_workers_serial >/dev/null 2>&1 || true
+    printf '{"ok":false,"status":"boot_failed","cameraDetected":false,"bridgeStarted":true,"workersStarted":true,"stage":"ptp_boot","attempts":1,"recoveryScheduled":true}\n'
+    exit 0
+  fi
+  if ! start_workers_serial; then
+    session_log "existing bridge failed worker startup"
+    printf '{"ok":false,"status":"worker_failed","cameraDetected":true,"bridgeStarted":true,"workersStarted":false,"stage":"worker"}\n'
+    exit 0
+  fi
+  if ! final_delivery_stage; then
+    session_log "existing bridge failed final delivery readiness"
+    printf '{"ok":false,"status":"worker_failed","cameraDetected":true,"bridgeStarted":true,"workersStarted":true,"stage":"delivery"}\n'
+    exit 0
+  fi
+  printf '%s\n' "$status_out"
+  exit 0
+fi
+
+LIVE_SESSION_SNAPSHOT=""
+if [ "$PRESERVE_LIVE" -eq 1 ] && [ -f "$LIVE_SESSION_STATE" ]; then
+  LIVE_SESSION_SNAPSHOT=$(cat "$LIVE_SESSION_STATE" 2>/dev/null || true)
+fi
+session_log "purging runtime tmp"
+purge_runtime_tmp
+if [ "$PRESERVE_LIVE" -eq 1 ] && [ -n "$LIVE_SESSION_SNAPSHOT" ]; then
+  printf '%s\n' "$LIVE_SESSION_SNAPSHOT" > "$LIVE_SESSION_STATE"
+else
+  rm -f "$SESSION_LIVE_REQUEST"
+fi
+rm -f "$SESSION_REPAIR_REQUEST"
+session_log "stopping runtime helpers"
+ws_stop >/dev/null 2>&1 || true
+battery_worker_stop >/dev/null 2>&1 || true
+session_health_stop >/dev/null 2>&1 || true
+stack_guardian_stop >/dev/null 2>&1 || true
+runtime_guardian_stop >/dev/null 2>&1 || true
+bridge_stop >/dev/null 2>&1 || true
+
+if ! bridge_only_start; then
+  session_log "bridge unavailable"
+  printf '{"ok":false,"status":"bridge_unavailable","cameraDetected":false,"bridgeStarted":false,"workersStarted":false}\n'
+  exit 0
+fi
+
+session_log "bridge started, connecting session"
+if ! boot_camera_stage; then
+  session_log "stage=ptp_boot failed once; starting session recovery workers"
+  start_workers_serial >/dev/null 2>&1 || true
+  printf '{"ok":false,"status":"boot_failed","cameraDetected":false,"bridgeStarted":true,"workersStarted":true,"stage":"ptp_boot","attempts":1,"recoveryScheduled":true}\n'
+  exit 0
+fi
+if ! camera_contract_ready "$status_out"; then
+  session_log "boot returned without the complete readiness contract"
+  printf '{"ok":false,"status":"boot_failed","cameraDetected":false,"bridgeStarted":true,"workersStarted":false,"stage":"readiness_contract"}\n'
+  exit 0
+fi
+
+if [ "$PRESERVE_LIVE" -eq 1 ]; then
+  session_log "restoring persistent live session after bridge restart"
+  bridge_request LIVE_START >/dev/null 2>&1 || true
+fi
+
+session_log "starting workers in serialized order"
+if ! start_workers_serial; then
+  session_log "worker stage exhausted attempts; preserving completed stages"
+  printf '{"ok":false,"status":"worker_failed","cameraDetected":true,"bridgeStarted":true,"workersStarted":false,"stage":"worker"}\n'
+  exit 0
+fi
+
+if ! final_delivery_stage; then
+  session_log "delivery stage did not produce an application-ready frame path"
+  printf '{"ok":false,"status":"worker_failed","cameraDetected":true,"bridgeStarted":true,"workersStarted":true,"stage":"delivery"}\n'
+  exit 0
+fi
+
+session_log "session ready"
+printf '%s\n' "$status_out"

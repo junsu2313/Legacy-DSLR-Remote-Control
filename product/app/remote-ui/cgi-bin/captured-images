@@ -1,0 +1,24 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+SCRIPT_DIR=$(dirname "$0")
+. "$SCRIPT_DIR/variant-v21-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+
+LIMIT=$(printf '%s' "${QUERY_STRING:-}" | tr '&' '\n' | sed -n 's/^limit=//p' | head -n 1)
+case "$LIMIT" in
+  ''|*[!0-9]*) LIMIT=24 ;;
+esac
+[ "$LIMIT" -gt 1000 ] 2>/dev/null && LIMIT=1000
+[ "$LIMIT" -lt 1 ] 2>/dev/null && LIMIT=1
+
+if bridge_start; then
+  RESPONSE=$(bridge_request "CAPTURED_IMAGES $LIMIT")
+  if [ -n "$RESPONSE" ] && printf '%s' "$RESPONSE" | grep -q '"ok":true'; then
+    printf 'Content-Type: application/json\r\nCache-Control: no-store, no-cache, must-revalidate\r\nPragma: no-cache\r\nExpires: 0\r\n\r\n'
+    printf '%s\n' "$RESPONSE"
+    exit 0
+  fi
+fi
+
+printf 'Status: 404 Not Found\r\nContent-Type: application/json\r\nCache-Control: no-store\r\n\r\n'
+printf '{"ok":false,"status":"captured_images_unavailable"}\n'

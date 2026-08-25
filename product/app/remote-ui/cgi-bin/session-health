@@ -1,0 +1,20 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+SCRIPT_DIR=$(dirname "$0")
+. "$SCRIPT_DIR/bridge-common.sh"
+
+SESSION_HEALTH_PIDFILE=${D810D_SESSION_HEALTH_PIDFILE:-/tmp/d810-session-health.pid}
+INTERVAL=${D810D_SESSION_HEALTH_INTERVAL:-600}
+printf '%s\n' "$$" > "$SESSION_HEALTH_PIDFILE"
+trap 'rm -f "$SESSION_HEALTH_PIDFILE"' EXIT INT TERM
+
+case "$INTERVAL" in
+  ''|*[!0-9]*) INTERVAL=600 ;;
+esac
+
+while :; do
+  if bridge_alive; then
+    bridge_request STATUS >/dev/null 2>&1 || true
+  fi
+  sleep "$INTERVAL"
+done

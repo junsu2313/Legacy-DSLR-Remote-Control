@@ -1,0 +1,281 @@
+#!/bin/sh
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+ACTION=${QUERY_STRING#action=}
+ACTION=${ACTION%%&*}
+SETTING_KEY=${QUERY_STRING#*key=}
+SETTING_KEY=${SETTING_KEY%%&*}
+SETTING_VALUE=${QUERY_STRING#*value=}
+SETTING_VALUE=${SETTING_VALUE%%&*}
+SCRIPT_DIR=$(dirname "$0")
+case "$SCRIPT_DIR" in
+  /*) ;;
+  *) SCRIPT_DIR=/www/cgi-bin ;;
+esac
+. "$SCRIPT_DIR/variant-v21-env.sh"
+. "$SCRIPT_DIR/bridge-common.sh"
+
+action_trace_log() {
+  printf '[action-v21][%s] %s\n' "$(now_ms)" "$1" >> "$BRIDGE_LOG"
+}
+
+TRACE_ID=""
+[ -z "${HTTP_X_D810_TRACE:-}" ] || TRACE_ID=$(telemetry_token "$HTTP_X_D810_TRACE")
+[ -n "$TRACE_ID" ] || TRACE_ID="opal-$(now_ms)-$$"
+[ -z "${HTTP_X_D810_COMMAND_ID:-}" ] || COMMAND_ID=$(telemetry_token "$HTTP_X_D810_COMMAND_ID")
+[ -n "$COMMAND_ID" ] || COMMAND_ID="$TRACE_ID-1"
+FIELD_UI_AT_MS=""
+[ -z "${HTTP_X_D810_UI_AT:-}" ] || FIELD_UI_AT_MS=$(telemetry_token "$HTTP_X_D810_UI_AT")
+FIELD_CLIENT_ID=unknown
+[ -z "${HTTP_X_D810_CLIENT:-}" ] || FIELD_CLIENT_ID=$(telemetry_token "$HTTP_X_D810_CLIENT")
+ACTION_STARTED_MS=$(now_ms)
+
+action_bridge_request() {
+  bridge_request "$1 TRACE_ID=$TRACE_ID COMMAND_ID=$COMMAND_ID"
+}
+
+stop_legacy_frame_refresh_if_present() {
+  refresh_pidfile=${D810D_FRAME_REFRESH_PIDFILE:-/tmp/d810-live-v21-refresh.pid}
+  refresh_lockdir=${D810D_FRAME_REFRESH_LOCKDIR:-/tmp/d810-live-v21-refresh.lock}
+  [ -r "$refresh_pidfile" ] || [ -d "$refresh_lockdir" ] || return 0
+  /bin/sh "$SCRIPT_DIR/frame-refresh-v21" stop >/dev/null 2>&1 || true
+}
+
+action_result_log() {
+  result=$1
+  error_code=${2:-}
+  action_finished_ms=$(now_ms)
+  field_event_log action_completed "$result" "$ACTION" "$TRACE_ID" "$COMMAND_ID" \
+    "$((action_finished_ms - ACTION_STARTED_MS))" "$error_code"
+}
+
+OUT=""
+STATUS=""
+NEEDS_BRIDGE=0
+
+action_trace_log "received query=${QUERY_STRING:-}"
+action_trace_log "headers trace=${HTTP_X_D810_TRACE:-} event=${HTTP_X_D810_EVENT:-} client=${HTTP_X_D810_CLIENT:-} ui_at=${HTTP_X_D810_UI_AT:-} ui_stage=${HTTP_X_D810_UI_STAGE:-} ui_action=${HTTP_X_D810_UI_ACTION:-}"
+
+case "$ACTION" in
+  trace)
+    STATUS=logged
+    ;;
+  live-on|live-off|live-fallback|mute|status|shutter|shutter-prepare|shutter-hold-start|shutter-hold-stop|raw|unlock|af|recover|maintain|reset|manual-status|manual-mode|manual-set|auto-iso)
+    NEEDS_BRIDGE=1
+    ;;
+  diagnose)
+    NEEDS_BRIDGE=0
+    ;;
+  *)
+    ACTION=unknown
+    STATUS=unknown
+    ;;
+esac
+
+if [ "$NEEDS_BRIDGE" -eq 1 ] && ! bridge_action_guard; then
+  action_trace_log "bridge unavailable action=${ACTION}"
+  action_result_log FAIL bridge_unavailable
+  printf 'Content-Type: application/json\r\nCache-Control: no-store\r\nX-D810-Trace: %s\r\nX-D810-Command-Id: %s\r\n\r\n' "$TRACE_ID" "$COMMAND_ID"
+  printf '{"ok":false,"action":"%s","status":"bridge_unavailable"}\n' "$ACTION"
+  exit 0
+fi
+
+REQUIRES_APP_READY=0
+case "$ACTION" in
+  af|shutter|shutter-prepare|shutter-hold-start|raw|unlock|manual-mode|manual-set|auto-iso)
+    REQUIRES_APP_READY=1
+    ;;
+esac
+if [ "$REQUIRES_APP_READY" -eq 1 ] && ! bridge_app_ready; then
+  BRIDGE_READINESS_STATE=$(telemetry_token "$BRIDGE_READINESS_STATE")
+  BRIDGE_READINESS_REASON=$(telemetry_token "$BRIDGE_READINESS_REASON")
+  [ -n "$BRIDGE_READINESS_STATE" ] || BRIDGE_READINESS_STATE=unknown
+  [ -n "$BRIDGE_READINESS_REASON" ] || BRIDGE_READINESS_REASON=not_ready
+  action_trace_log "app not ready action=${ACTION} state=${BRIDGE_READINESS_STATE} reason=${BRIDGE_READINESS_REASON}"
+  action_result_log FAIL app_not_ready
+  printf 'Content-Type: application/json\r\nCache-Control: no-store\r\nX-D810-Trace: %s\r\nX-D810-Command-Id: %s\r\n\r\n' "$TRACE_ID" "$COMMAND_ID"
+  printf '{"ok":false,"action":"%s","status":"app_not_ready","readinessState":"%s","readinessReason":"%s"}\n' \
+    "$ACTION" "$BRIDGE_READINESS_STATE" "$BRIDGE_READINESS_REASON"
+  exit 0
+fi
+
+LIVE_ACTION_LOCK_HELD=0
+case "$ACTION" in
+  live-on|live-off|mute|recover|reset|diagnose)
+    if ! acquire_live_action_lock; then
+      action_trace_log "live action lock busy action=${ACTION}"
+      action_result_log FAIL camera_busy
+      printf 'Content-Type: application/json\r\nCache-Control: no-store\r\nX-D810-Trace: %s\r\nX-D810-Command-Id: %s\r\n\r\n' "$TRACE_ID" "$COMMAND_ID"
+      printf '{"ok":false,"action":"%s","status":"camera_busy"}\n' "$ACTION"
+      exit 0
+    fi
+    LIVE_ACTION_LOCK_HELD=1
+    trap 'release_live_action_lock' EXIT INT TERM HUP
+    ;;
+esac
+
+case "$ACTION" in
+  trace)
+    action_trace_log "trace event query=${QUERY_STRING:-}"
+    OUT='{"ok":true,"action":"trace","status":"logged"}'
+    ;;
+  diagnose)
+    action_trace_log "starting evidence-based diagnosis and automatic scoped recovery"
+    OUT=$(/bin/sh "$SCRIPT_DIR/diagnose-recover" auto)
+    action_trace_log "diagnosis completed ${OUT%%$'\n'*}"
+    ;;
+  live-on)
+    # The persistent bridge is the only live-frame producer.  A stale fallback
+    # worker would make the bridge suppress its own capture loop.
+    stop_legacy_frame_refresh_if_present
+    action_trace_log "forwarding LIVE_START"
+    OUT=$(action_bridge_request LIVE_START)
+    action_trace_log "bridge response action=live-on ${OUT%%$'\n'*}"
+    case "$OUT" in
+      *'"ok":true'*)
+        printf '%s\n' "$ACTION" > "$SESSION_LIVE_REQUEST"
+        if [ "${D810D_DISABLE_DIRECT_STREAM:-0}" = "1" ] && \
+            [ -x "${D810D_FRAME_REFRESH_SCRIPT:-}" ]; then
+          /bin/sh "$D810D_FRAME_REFRESH_SCRIPT" start >/dev/null 2>&1 || true
+        fi
+        ;;
+    esac
+    ;;
+  live-off|mute)
+    action_trace_log "forwarding LIVE_STOP"
+    rm -f "$SESSION_LIVE_REQUEST" "$SESSION_REPAIR_REQUEST"
+    stop_legacy_frame_refresh_if_present
+    OUT=$(action_bridge_request LIVE_STOP)
+    action_trace_log "bridge response action=$ACTION ${OUT%%$'\n'*}"
+    ;;
+  live-fallback)
+    # HTTP fallback consumes the bridge-owned cache; it must never create a
+    # second PTP capture worker or request a session repair.
+    stop_legacy_frame_refresh_if_present
+    action_trace_log "fallback consumer enabled; bridge remains sole producer"
+    OUT='{"ok":true,"status":"live_fallback_ready","liveView":true}'
+    ;;
+  status)
+    action_trace_log "forwarding STATUS"
+    OUT=$(action_bridge_request STATUS)
+    action_trace_log "bridge response action=status ${OUT%%$'\n'*}"
+    ;;
+  shutter)
+    action_trace_log "forwarding SHUTTER"
+    OUT=$(action_bridge_request SHUTTER)
+    action_trace_log "bridge response action=shutter ${OUT%%$'\n'*}"
+    ;;
+  shutter-prepare)
+    action_trace_log "forwarding SHUTTER_PREPARE"
+    OUT=$(action_bridge_request SHUTTER_PREPARE)
+    action_trace_log "bridge response action=shutter-prepare ${OUT%%$'\n'*}"
+    ;;
+  shutter-hold-start)
+    action_trace_log "forwarding SHUTTER_HOLD_BEGIN"
+    OUT=$(action_bridge_request SHUTTER_HOLD_BEGIN)
+    action_trace_log "bridge response action=shutter-hold-start ${OUT%%$'\n'*}"
+    ;;
+  shutter-hold-stop)
+    action_trace_log "forwarding SHUTTER_HOLD_END"
+    OUT=$(action_bridge_request SHUTTER_HOLD_END)
+    action_trace_log "bridge response action=shutter-hold-stop ${OUT%%$'\n'*}"
+    ;;
+  raw)
+    action_trace_log "forwarding RAW_MODE"
+    OUT=$(action_bridge_request RAW_MODE)
+    action_trace_log "bridge response action=raw ${OUT%%$'\n'*}"
+    ;;
+  unlock)
+    action_trace_log "forwarding UNLOCK"
+    OUT=$(action_bridge_request UNLOCK)
+    action_trace_log "bridge response action=unlock ${OUT%%$'\n'*}"
+    ;;
+  af)
+    action_trace_log "forwarding AF"
+    OUT=$(action_bridge_request AF)
+    action_trace_log "bridge response action=af ${OUT%%$'\n'*}"
+    ;;
+  recover)
+    action_trace_log "delegating recovery judgment to DIAG"
+    OUT=$(/bin/sh "$SCRIPT_DIR/diagnose-recover" auto)
+    action_trace_log "DIAG recovery completed ${OUT%%$'\n'*}"
+    ;;
+  maintain)
+    action_trace_log "forwarding MAINTAIN"
+    OUT=$(action_bridge_request MAINTAIN)
+    action_trace_log "bridge response action=maintain ${OUT%%$'\n'*}"
+    ;;
+  manual-status)
+    action_trace_log "forwarding MANUAL_STATUS"
+    OUT=$(action_bridge_request MANUAL_STATUS)
+    action_trace_log "bridge response action=manual-status ${OUT%%$'\n'*}"
+    ;;
+  manual-mode)
+    action_trace_log "forwarding SET_MANUAL_MODE"
+    OUT=$(action_bridge_request SET_MANUAL_MODE)
+    action_trace_log "bridge response action=manual-mode ${OUT%%$'\n'*}"
+    ;;
+  auto-iso)
+    case "$SETTING_VALUE" in
+      0|1)
+        action_trace_log "forwarding SET_AUTO_ISO value=$SETTING_VALUE"
+        OUT=$(action_bridge_request "SET_AUTO_ISO $SETTING_VALUE")
+        action_trace_log "bridge response action=auto-iso ${OUT%%$'\n'*}"
+        ;;
+      *)
+        OUT='{"ok":false,"status":"invalid_auto_iso"}'
+        ;;
+    esac
+    ;;
+  manual-set)
+    case "$SETTING_KEY" in
+      aperture|shutter|iso)
+        case "$SETTING_VALUE" in
+          ''|*[!0-9]*) OUT='{"ok":false,"status":"invalid_manual_setting"}' ;;
+          *)
+        action_trace_log "forwarding SET_M key=$SETTING_KEY"
+        OUT=$(action_bridge_request "SET_M $SETTING_KEY=$SETTING_VALUE")
+        action_trace_log "bridge response action=manual-set ${OUT%%$'\n'*}"
+            ;;
+        esac
+        ;;
+      *)
+        OUT='{"ok":false,"status":"invalid_manual_setting"}'
+        ;;
+    esac
+    ;;
+  reset)
+    action_trace_log "starting hard KILL recovery without waiting for bridge command response"
+    rm -f "$SESSION_LIVE_REQUEST" "$SESSION_REPAIR_REQUEST"
+    OUT=$(wget -T 45 -qO- "http://127.0.0.1/cgi-bin/session-manager?boot=hard-kill&reset=1&reason=manual_hard_recovery" 2>>"$BRIDGE_LOG")
+    case "$OUT" in
+      *'"ok":true'*'"sessionId"'*)
+        action_trace_log "hard KILL session replacement succeeded ${OUT%%$'\n'*}"
+        ;;
+      *)
+        OUT='{"ok":false,"action":"reset","status":"hard_recovery_failed"}'
+        action_trace_log "hard KILL session replacement failed response=${OUT%%$'\n'*}"
+        ;;
+    esac
+    ;;
+esac
+
+if [ "$LIVE_ACTION_LOCK_HELD" -eq 1 ]; then
+  release_live_action_lock
+  trap - EXIT INT TERM HUP
+fi
+
+case "$OUT" in
+  *'"ok":true'*) action_result_log PASS "" ;;
+  *)
+    ACTION_ERROR=$(printf '%s' "$OUT" | sed -n 's/.*"status":"\([^"]*\)".*/\1/p' | head -n 1)
+    action_result_log FAIL "${ACTION_ERROR:-bridge_unavailable}"
+    ;;
+esac
+printf 'Content-Type: application/json\r\nCache-Control: no-store\r\nX-D810-Trace: %s\r\nX-D810-Command-Id: %s\r\n\r\n' "$TRACE_ID" "$COMMAND_ID"
+if [ -n "$OUT" ]; then
+  printf '%s\n' "$OUT"
+elif [ "$STATUS" = "unknown" ]; then
+  printf '{"ok":false,"action":"%s","status":"unknown"}\n' "$ACTION"
+else
+  printf '{"ok":false,"action":"%s","status":"bridge_unavailable"}\n' "$ACTION"
+fi
